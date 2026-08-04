@@ -1,0 +1,36 @@
+# ===== 依赖 =====
+node_modules/
+.packages/
+.pnp
+.pnp.js
+
+# ===== 构建产物 =====
+dist/
+build/
+*.tsbuildinfo
+
+# Vite 用 esbuild 直接编译 .ts，client/src 下不应出现 tsc 直吐的 .js/.d.ts
+client/src/**/*.js
+client/src/**/*.js.map
+client/src/**/*.d.ts
+vite.config.ts.timestamp-*.mjs
+
+# ===== 环境变量 / 密钥（切勿提交） =====
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ===== 日志 / 运行时 =====
+logs/
+*.log
+npm-debug.log*
+server/data/
+.npm-tmp/
+
+# ===== 编辑器 / 系统 =====
+.vscode/
+.idea/
+.DS_Store
+*.swp
+.workbuddy/
