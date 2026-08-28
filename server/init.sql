@@ -127,7 +127,8 @@ CREATE TABLE IF NOT EXISTS schedule_items (
   notes            text,
   "imageUrl"       varchar,
   "transportToNext" varchar,
-  status           varchar NOT NULL DEFAULT 'pending'
+  status           varchar NOT NULL DEFAULT 'pending',
+  "version"        integer NOT NULL DEFAULT 1                 -- 乐观锁：编辑冲突检测(8.2)
 );
 
 -- 花费 / 记账
@@ -160,6 +161,10 @@ CREATE INDEX IF NOT EXISTS idx_expenses_trip        ON expenses("tripId");
 -- 6) 增量更新区（schema 变更时在此追加，保持 IF NOT EXISTS 使其可重复执行）
 --    例：将来给 expenses 加 currency 字段
 --    ALTER TABLE expenses ADD COLUMN IF NOT EXISTS currency varchar DEFAULT 'CNY';
+-- -----------------------------------------------------------------------------
+-- 2026-08-05 追加：schedule_items 增加乐观锁 version 列（8.2 编辑冲突检测）。
+-- 已存在的库重跑本脚本时，CREATE TABLE 不会改已有表，故用 ALTER 补齐。
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "version" integer NOT NULL DEFAULT 1;
 -- =============================================================================
 
 -- 完成提示

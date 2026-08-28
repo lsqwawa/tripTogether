@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
-import { loadTencentMap, getTMap, hexToRgbNum } from "../utils/tencentMap";
+import { loadTencentMap, getTMap, hexToRgbNum, TENCENT_MAP_KEY, getCachedRoadPath } from "../utils/tencentMap";
 
 export interface MapLocation {
   lat: number;
@@ -24,8 +24,19 @@ export const DAY_COLORS = [
 // 跨天移动轨迹线（中性灰虚线）
 const CROSS_DAY_COLOR = "#8c8c8c";
 
-function pinHtml(color: string, label: string): string {
-  return `<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700;">${label}</span></div>`;
+// 创建自定义 marker DOM 元素（彩色圆形 pin + 天数编号）
+function createMarkerDom(color: string, label: string): HTMLDivElement {
+  const el = document.createElement("div");
+  el.style.cssText =
+    "width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);" +
+    "background:" + color + ";border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);" +
+    "display:flex;align-items:center;justify-content:center;";
+  const span = document.createElement("span");
+  span.style.cssText =
+    "transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700;font-family:-apple-system,sans-serif;";
+  span.textContent = label;
+  el.appendChild(span);
+  return el;
 }
 
 interface Props {
@@ -33,142 +44,202 @@ interface Props {
   showPolylines?: boolean;
 }
 
-function renderLocations(
+// 路线生长动画：渐进 reveal 每个 polyline 的顶点
+function animatePolylines(
+  polylines: any,
+  fullGeoms: any[],
+  layersRef: MutableRefObject<any>,
+  token: number
+) {
+  const FPS = 30;
+  const DUR = 700;
+  const frames = Math.ceil((FPS * DUR) / 1000);
+  let f = 0;
+  const timer = setInterval(() => {
+    if (token !== layersRef.current.token) {
+      clearInterval(timer);
+      return;
+    }
+    f++;
+    const p = Math.min(1, f / frames);
+    const geoms = fullGeoms.map((g) => ({
+      id: g.id,
+      styleId: g.styleId,
+      paths: g.paths.slice(0, Math.max(2, Math.ceil(g.paths.length * p))),
+    }));
+    try {
+      polylines.setGeometries(geoms);
+    } catch (e) {
+      /* ignore */
+    }
+    if (f >= frames) {
+      clearInterval(timer);
+      if (layersRef.current.token === token) layersRef.current.animTimer = null;
+    }
+  }, 1000 / FPS);
+  layersRef.current.animTimer = timer;
+}
+
+async function renderLocations(
   TMap: any,
   map: any,
   locations: MapLocation[],
   showPolylines: boolean,
   layersRef: MutableRefObject<any>
 ) {
-  const old = layersRef.current;
-  if (old.markers) old.markers.setMap(null);
+  const token = (layersRef.current.token || 0) + 1;
+  layersRef.current.token = token;
+
+  // 清掉旧图层
+  const old = layersRef.current || {};
+  if (old.markerList) {
+    old.markerList.forEach((m: any) => m.setMap(null));
+  }
   if (old.polylines) old.polylines.setMap(null);
   if (old.infoWindow) old.infoWindow.setMap(null);
+  if (old.animTimer) clearInterval(old.animTimer);
 
   if (!locations || locations.length === 0) {
-    layersRef.current = {};
+    layersRef.current = { token };
     return;
   }
 
   const bounds = new TMap.LatLngBounds();
-  const geometries: any[] = [];
-  const styles: any = {};
-  // 住宿专属标记样式
-  styles["hotel"] = new TMap.MarkerStyle({
-    width: 30,
-    height: 30,
-    anchor: { x: 15, y: 30 },
-    content: pinHtml("#722ed1", "🏨"),
-  });
+  const markerList: any[] = [];
 
   // 按天分组（用于连点成线），day>=1 才参与当天连线
   const dayMap: Record<number, MapLocation[]> = {};
 
+  // 逐个创建 Marker（用 DOM overlay 确保自定义样式可靠渲染）
   locations.forEach((loc, idx) => {
     const day = loc.dayIndex || 0;
-    let styleId: string;
+    let color: string;
+    let label: string;
+
     if (loc.type === "hotel") {
-      styleId = "hotel";
+      color = "#722ed1";
+      label = "\u{1F3E8}"; // 🏨
     } else {
-      const color = day > 0 ? DAY_COLORS[(day - 1) % DAY_COLORS.length] : "#8c8c8c";
-      styleId = `d${day}`;
-      if (!styles[styleId]) {
-        styles[styleId] = new TMap.MarkerStyle({
-          width: 30,
-          height: 30,
-          anchor: { x: 15, y: 30 },
-          content: pinHtml(color, day > 0 ? String(day) : "📍"),
-        });
-      }
+      color = day > 0 ? DAY_COLORS[(day - 1) % DAY_COLORS.length] : "#8c8c8c";
+      label = day > 0 ? String(day) : "\u{1F4CD}"; // 📍
     }
-    geometries.push({
-      id: `m${idx}`,
-      styleId,
+
+    const dom = createMarkerDom(color, label);
+    const marker = new TMap.Marker({
+      map,
       position: new TMap.LatLng(loc.lat, loc.lng),
-      properties: { title: loc.title, day, type: loc.type },
+      content: dom,
+      offset: { x: -14, y: -28 }, // 居中偏上（28px 高度）
+      zIndex: loc.type === "hotel" ? 20 : 10 + (day || 0),
     });
+
+    // 点击弹出信息窗口
+    marker.on("click", () => {
+      openInfo(TMap, map, layersRef, {
+        lat: loc.lat,
+        lng: loc.lng,
+        title: loc.title,
+        day,
+        type: loc.type,
+      });
+    });
+
+    markerList.push(marker);
     bounds.extend(new TMap.LatLng(loc.lat, loc.lng));
+
     if (day > 0) {
       if (!dayMap[day]) dayMap[day] = [];
       dayMap[day].push(loc);
     }
   });
 
-  const markers = new TMap.MultiMarker({ map, geometries, styles });
+  layersRef.current = { ...layersRef.current, markerList, infoWindow: old.infoWindow, token };
+  if (locations.length > 1) map.fitBounds(bounds, { padding: 80 });
 
-  markers.on("click", (e: any) => {
-    const g = e.geometry;
-    if (!g) return;
-    const props = g.properties || {};
-    openInfo(TMap, map, layersRef, {
-      lat: g.position.lat,
-      lng: g.position.lng,
-      title: props.title,
-      day: props.day,
-      type: props.type,
+  if (!showPolylines) return;
+
+  // 收集需要绘制的线段
+  type Seg = {
+    day: number;
+    colorNum: number;
+    a: { lat: number; lng: number };
+    b: { lat: number; lng: number };
+    straight?: boolean;
+  };
+  const segs: Seg[] = [];
+
+  // 1) 当天内的相邻点 → 真实路径
+  Object.keys(dayMap)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .forEach((day) => {
+      const dl = dayMap[day];
+      const colorNum = hexToRgbNum(DAY_COLORS[(day - 1) % DAY_COLORS.length]);
+      for (let i = 0; i < dl.length - 1; i++) {
+        segs.push({ day, colorNum, a: dl[i], b: dl[i + 1] });
+      }
+    });
+
+  // 2) 跨天移动：相邻行程天「最后一点 → 次日首点」用中性灰虚线（直线）
+  const days = Object.keys(dayMap)
+    .map(Number)
+    .filter((d) => d >= 1)
+    .sort((a, b) => a - b);
+  for (let i = 0; i < days.length - 1; i++) {
+    const cur = dayMap[days[i]];
+    const next = dayMap[days[i + 1]];
+    if (!cur.length || !next.length) continue;
+    const last = cur[cur.length - 1];
+    const first = next[0];
+    segs.push({
+      day: days[i],
+      colorNum: hexToRgbNum(CROSS_DAY_COLOR),
+      a: { lat: last.lat, lng: last.lng },
+      b: { lat: first.lat, lng: first.lng },
+      straight: true,
+    });
+  }
+
+  // 拉取真实路径（直线段跳过）；有界并发：最多 4 个同时请求，避免突破 5 QPS
+  const MAX_CONCURRENT = 4;
+  for (let i = 0; i < segs.length; i += MAX_CONCURRENT) {
+    const batch = segs.slice(i, i + MAX_CONCURRENT).filter((s) => !s.straight);
+    await Promise.all(
+      batch.map(async (s) => {
+        (s as any).points = await getCachedRoadPath(TMap, s.a, s.b);
+      })
+    );
+    if (token !== layersRef.current.token) return;
+  }
+
+  // 构建 polyline 几何
+  const polyGeoms: any[] = [];
+  const polyStyles: any = {};
+  segs.forEach((s, i) => {
+    const pts: { lat: number; lng: number }[] = (s as any).points || [s.a, s.b];
+    const sid = s.straight ? "xd" : `p${s.day}_${i}`;
+    if (!polyStyles[sid]) {
+      polyStyles[sid] = new TMap.PolylineStyle({
+        color: s.colorNum,
+        width: s.straight ? 3 : 4,
+        lineDash: s.straight ? [4, 6] : undefined as any,
+        borderWidth: 0,
+      });
+    }
+    polyGeoms.push({
+      id: `pl${i}`,
+      styleId: sid,
+      paths: pts.map((p) => new TMap.LatLng(p.lat, p.lng)),
     });
   });
 
-  let polylines: any = null;
-  if (showPolylines) {
-    const polyGeoms: any[] = [];
-    const polyStyles: any = {};
+  if (polyGeoms.length === 0) return;
 
-    // 1) 当天内的点连成当日彩色线
-    Object.keys(dayMap)
-      .map(Number)
-      .sort((a, b) => a - b)
-      .forEach((day) => {
-        const dl = dayMap[day];
-        if (dl.length < 2) return;
-        const color = DAY_COLORS[(day - 1) % DAY_COLORS.length];
-        const sid = `p${day}`;
-        polyStyles[sid] = new TMap.PolylineStyle({
-          color: hexToRgbNum(color),
-          width: 4,
-          lineDash: [8, 6],
-          borderWidth: 0,
-        });
-        polyGeoms.push({
-          id: `pl${day}`,
-          styleId: sid,
-          paths: dl.map((l) => new TMap.LatLng(l.lat, l.lng)),
-        });
-      });
+  const polylines = new TMap.MultiPolyline({ map, geometries: polyGeoms, styles: polyStyles });
+  layersRef.current = { ...layersRef.current, polylines, token };
 
-    // 2) 跨天移动：相邻行程天「最后一点 → 次日首点」用中性灰虚线串联
-    const days = Object.keys(dayMap)
-      .map(Number)
-      .filter((d) => d >= 1)
-      .sort((a, b) => a - b);
-    for (let i = 0; i < days.length - 1; i++) {
-      const cur = dayMap[days[i]];
-      const next = dayMap[days[i + 1]];
-      if (!cur.length || !next.length) continue;
-      const last = cur[cur.length - 1];
-      const first = next[0];
-      polyStyles["xd"] = new TMap.PolylineStyle({
-        color: hexToRgbNum(CROSS_DAY_COLOR),
-        width: 3,
-        lineDash: [4, 6],
-        borderWidth: 0,
-      });
-      polyGeoms.push({
-        id: `xd${days[i]}`,
-        styleId: "xd",
-        paths: [new TMap.LatLng(last.lat, last.lng), new TMap.LatLng(first.lat, first.lng)],
-      });
-    }
-
-    if (polyGeoms.length > 0) {
-      polylines = new TMap.MultiPolyline({ map, geometries: polyGeoms, styles: polyStyles });
-    }
-  }
-
-  layersRef.current = { markers, polylines, infoWindow: layersRef.current.infoWindow };
-  if (locations.length > 1) {
-    map.fitBounds(bounds, 80);
-  }
+  // 路线生长动画
+  animatePolylines(polylines, polyGeoms, layersRef, token);
 }
 
 function openInfo(
@@ -178,14 +249,23 @@ function openInfo(
   info: { lat: number; lng: number; title: string; day?: number; type?: string }
 ) {
   if (layersRef.current.infoWindow) layersRef.current.infoWindow.setMap(null);
-  const tag = info.type === "hotel" ? "🏨 住宿" : info.day ? `第${info.day}天` : "";
+  const tag = info.type === "hotel" ? "\u{1F3E8} \u4F4F\u5BBF" : info.day ? "\u7B2C" + info.day + "\u5929" : "";
   const iw = new TMap.InfoWindow({
     map,
     position: new TMap.LatLng(info.lat, info.lng),
-    content: `<div style="padding:6px 8px;font-size:13px;max-width:200px;"><b>${info.title}</b>${tag ? `<br/>${tag}` : ""}</div>`,
+    content:
+      '<div style="padding:6px 8px;font-size:13px;max-width:200px;"><b>' +
+      escapeHtml(info.title) +
+      "</b>" +
+      (tag ? "<br/>" + tag : "") +
+      "</div>",
     offset: { x: 0, y: -28 },
   });
   layersRef.current.infoWindow = iw;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 export default function MapView({ locations, showPolylines = true }: Props) {
@@ -203,7 +283,7 @@ export default function MapView({ locations, showPolylines = true }: Props) {
       })
       .catch(() => {
         if (!cancelled)
-          setError("腾讯地图加载失败，请检查 Key 与授权域名（Referer 白名单）配置");
+          setError("\u817E\u8BAF\u5730\u56FE\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5 Key \u4E0E\u6388\u6743\u57DF\u540D\uFF08Referer \u767D\u540D\u5355\uFF09\u914D\u7F6E");
       });
     return () => {
       cancelled = true;
@@ -223,6 +303,13 @@ export default function MapView({ locations, showPolylines = true }: Props) {
       zoom: 12,
       baseMap: { type: "vector" },
     });
+    // 浅色/简约底图样式（预设 style3=白浅）
+    try {
+      if (typeof map.setMapStyle === "function") map.setMapStyle("style3");
+      else if (typeof map.setMapStyleId === "function") map.setMapStyleId("style3");
+    } catch (e) {
+      /* 样式不可用则保持默认底图 */
+    }
     mapRef.current = map;
     setTimeout(() => map.resize?.(), 0);
     return () => {
@@ -232,12 +319,20 @@ export default function MapView({ locations, showPolylines = true }: Props) {
     };
   }, [ready, hasLocs]);
 
-  // 坐标变化时刷新图层
+  // 坐标变化时刷新图层（异步拉取真实路径）
   useEffect(() => {
     const map = mapRef.current;
     const TMap = getTMap();
     if (!map || !TMap || !hasLocs) return;
-    renderLocations(TMap, map, locations, showPolylines, layersRef);
+    renderLocations(TMap, map, locations, showPolylines, layersRef).catch((e) =>
+      console.error("[MapView] \u6E32\u67D3\u5931\u8D25:", e)
+    );
+    return () => {
+      if (layersRef.current.animTimer) {
+        clearInterval(layersRef.current.animTimer);
+        layersRef.current.animTimer = null;
+      }
+    };
   }, [locations, showPolylines, ready, hasLocs]);
 
   if (error) {
@@ -267,7 +362,7 @@ export default function MapView({ locations, showPolylines = true }: Props) {
           borderRadius: 8,
         }}
       >
-        暂无地点坐标数据。在日程项或住宿中通过「搜索定位」或「地图选点」填写地点后即可查看地图路线。
+        \u6682\u65E0\u5730\u70B9\u5750\u6807\u6570\u636E\u3002\u5728\u65E5\u7A0B\u9879\u6216\u4F4F\u5BBF\u4E2D\u901A\u8FC7\u300C\u641C\u7D22\u5B9A\u4F4D\u300D\u6216\u300C\u5730\u56FE\u9009\u70B9\u300D\u586B\u5199\u5730\u70B9\u540E\u5373\u53EF\u67E5\u770B\u5730\u56FE\u8DEF\u7EBF\u3002
       </div>
     );
   }

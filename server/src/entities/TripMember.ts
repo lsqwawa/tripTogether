@@ -14,10 +14,10 @@ export class TripMember {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: "varchar" })
+  @Column({ type: "uuid" })
   tripId: string;
 
-  @Column({ type: "varchar" })
+  @Column({ type: "uuid" })
   userId: string;
 
   @Column({ type: "varchar", default: "editor" })

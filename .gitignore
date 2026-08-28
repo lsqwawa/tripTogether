@@ -26,11 +26,16 @@ logs/
 *.log
 npm-debug.log*
 server/data/
+# 本地调试种子脚本（含硬编码 Token，勿入库）
+server/scripts/
 .npm-tmp/
 
 # ===== 编辑器 / 系统 =====
+.github/
 .vscode/
 .idea/
 .DS_Store
 *.swp
 .workbuddy/
+.husky/
+overview.md
