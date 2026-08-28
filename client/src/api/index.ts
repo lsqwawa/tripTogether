@@ -87,6 +87,19 @@ export const transportApi = {
     client.delete(`/trips/${tripId}/transportations/${id}`).then((r) => r.data),
 };
 
+// ==================== 交通班次查询（代理） =================
+
+export const transportLookupApi = {
+  get: (type: "flight" | "train", code: string) =>
+    client
+      .get<{
+        success: boolean;
+        source: "aviationstack" | "mock" | "12306";
+        data: any;
+      }>("/transport-lookup", { params: { type, code } })
+      .then((r) => r.data),
+};
+
 // ==================== Accommodation ====================
 
 export const accommodationApi = {

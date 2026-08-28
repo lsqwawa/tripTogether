@@ -10,6 +10,7 @@ import planRoutes from "./routes/planRoutes";
 import userRoutes from "./routes/userRoutes";
 import expenseRoutes from "./routes/expenseRoutes";
 import shareRoutes from "./routes/shareRoutes";
+import transportLookupRoutes from "./routes/transportLookup";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,9 @@ app.use("/api/users", userRoutes);
 app.use("/api/trips", authenticate, tripRoutes);
 app.use("/api/trips/:tripId", authenticate, planRoutes);
 app.use("/api/trips/:tripId/expenses", authenticate, expenseRoutes);
+
+// 交通班次查询代理（航班/火车）：登录即可用
+app.use("/api/transport-lookup", transportLookupRoutes);
 
 // 健康检查
 app.get("/api/health", (req, res) => {

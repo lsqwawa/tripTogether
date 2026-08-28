@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Spin,
@@ -34,7 +34,7 @@ import {
   HolderOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { tripApi, scheduleApi, transportApi, accommodationApi } from "../api";
+import { tripApi, scheduleApi, transportApi, accommodationApi, transportLookupApi } from "../api";
 import type {
   Trip,
   ScheduleItem,
@@ -920,6 +920,21 @@ function TransportTab({
   const [editingItem, setEditingItem] = useState<Transportation | null>(null);
   const [form] = Form.useForm();
 
+  // 班次查询（航班/火车）状态
+  const [lookup, setLookup] = useState<{
+    type: "flight" | "train";
+    data: any;
+    source: string;
+  } | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  const resetLookup = () => {
+    setLookup(null);
+    setLookupError(null);
+    setLookupLoading(false);
+  };
+
   const openAdd = (type: "departure" | "return" | "intercity") => {
     setEditingItem(null);
     form.resetFields();
@@ -928,6 +943,7 @@ function TransportTab({
       transportType: "flight",
       status: "pending",
     });
+    resetLookup();
     setModalOpen(true);
   };
 
@@ -938,7 +954,66 @@ function TransportTab({
       departureTime: item.departureTime ? dayjs(item.departureTime) : undefined,
       arrivalTime: item.arrivalTime ? dayjs(item.arrivalTime) : undefined,
     });
+    resetLookup();
     setModalOpen(true);
+  };
+
+  // 监听「交通方式 + 预订信息」，命中正则即防抖查询班次
+  const lookupType = Form.useWatch("transportType", form);
+  const lookupCode = Form.useWatch("bookingInfo", form);
+  useEffect(() => {
+    const code = (lookupCode || "").trim();
+    const type = lookupType;
+    if ((type === "flight" || type === "train") && code) {
+      const re =
+        type === "flight"
+          ? /^[A-Za-z]{2}\d{1,4}$/
+          : /^[GCDZKTL]\d{1,4}$/i;
+      if (!re.test(code)) {
+        resetLookup();
+        return;
+      }
+      setLookupLoading(true);
+      setLookupError(null);
+      const timer = setTimeout(async () => {
+        try {
+          const res = await transportLookupApi.get(type, code);
+          setLookup({ type, data: res.data, source: res.source });
+        } catch (e: any) {
+          setLookup(null);
+          setLookupError(
+            e?.response?.data?.error || e?.message || "查询失败，请稍后重试"
+          );
+        } finally {
+          setLookupLoading(false);
+        }
+      }, 500);
+      return () => {
+        clearTimeout(timer);
+        setLookupLoading(false);
+      };
+    }
+    resetLookup();
+  }, [lookupType, lookupCode]);
+
+  // 把查询结果回填到表单
+  const backfillFromLookup = () => {
+    if (!lookup) return;
+    const d = lookup.data;
+    const set: Record<string, unknown> = {};
+    if (lookup.type === "flight") {
+      if (d.departure?.airport) set.departurePlace = d.departure.airport;
+      if (d.arrival?.airport) set.arrivalPlace = d.arrival.airport;
+      if (d.departure?.scheduled) set.departureTime = dayjs(d.departure.scheduled);
+      if (d.arrival?.scheduled) set.arrivalTime = dayjs(d.arrival.scheduled);
+      form.setFieldsValue(set);
+      message.success("已回填航班起降信息");
+    } else {
+      if (d.fromStation) set.departurePlace = d.fromStation;
+      if (d.toStation) set.arrivalPlace = d.toStation;
+      form.setFieldsValue(set);
+      message.success("已回填车次起终站信息");
+    }
   };
 
   const handleSave = async () => {
@@ -1145,6 +1220,98 @@ function TransportTab({
           <Form.Item name="bookingInfo" label="预订信息">
             <Input placeholder="航班号/车次号/订单号" />
           </Form.Item>
+
+          {/* 班次实时查询预览：选飞机输航班号 / 选火车输车次，自动查询并支持回填 */}
+          {lookupLoading && (
+            <div style={{ color: "#999", fontSize: 13, marginBottom: 8 }}>
+              <Spin size="small" /> 查询中…
+            </div>
+          )}
+          {lookupError && (
+            <div style={{ color: "#e53e3e", fontSize: 12, marginBottom: 8 }}>
+              {lookupError}
+            </div>
+          )}
+          {lookup && (
+            <div
+              style={{
+                background: "#f7f8fa",
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>
+                  {lookup.type === "flight" ? "✈️ 航班信息" : "🚄 车次信息"}{" "}
+                  {lookup.data.flightNumber || lookup.data.trainNumber}
+                </span>
+                {lookup.source === "mock" && (
+                  <Tag color="orange">演示数据</Tag>
+                )}
+                {lookup.source === "12306" && <Tag color="green">12306</Tag>}
+              </div>
+              {lookup.type === "flight" ? (
+                <div style={{ fontSize: 13, lineHeight: 1.9 }}>
+                  {lookup.data.airline && (
+                    <div>航司：{lookup.data.airline}</div>
+                  )}
+                  <div>
+                    出发：{lookup.data.departure?.airport}（
+                    {lookup.data.departure?.iata}）
+                    {lookup.data.departure?.terminal
+                      ? ` T${lookup.data.departure.terminal}`
+                      : ""}
+                    {lookup.data.departure?.gate
+                      ? ` · 登机口 ${lookup.data.departure.gate}`
+                      : ""}
+                  </div>
+                  <div>
+                    到达：{lookup.data.arrival?.airport}（
+                    {lookup.data.arrival?.iata}）
+                  </div>
+                  {lookup.data.status && (
+                    <div>状态：{lookup.data.status}</div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, lineHeight: 1.9 }}>
+                  <div>
+                    {lookup.data.fromStation} → {lookup.data.toStation}
+                  </div>
+                  <div>
+                    日期：{lookup.data.date} · 停靠 {lookup.data.stopCount} 站
+                  </div>
+                  {lookup.data.timetable?.length > 0 && (
+                    <div>
+                      经停：
+                      {lookup.data.timetable
+                        .slice(0, 3)
+                        .map((s: any) => s.station)
+                        .join(" / ")}
+                      {lookup.data.timetable.length > 3 ? " …" : ""}
+                    </div>
+                  )}
+                </div>
+              )}
+              <Button
+                size="small"
+                type="link"
+                onClick={backfillFromLookup}
+                style={{ paddingLeft: 0, marginTop: 4 }}
+              >
+                回填到表单
+              </Button>
+            </div>
+          )}
+
           <Form.Item name="notes" label="备注">
             <TextArea rows={2} />
           </Form.Item>
@@ -1652,50 +1819,56 @@ function MapTab({ trip }: { trip: Trip }) {
   const [showLines, setShowLines] = useState(true);
 
   // 按天收集坐标；住宿按 checkInDate 匹配当天，作为该天末站（用于「住宿→次日首景点」串联）
-  const dayMap = new Map<number, MapLocation[]>();
-  const dayDateMap = new Map<number, string>();
-  trip.schedules?.forEach((s) => {
-    dayDateMap.set(s.dayIndex, s.date);
-    s.items?.forEach((item) => {
-      if (item.lat && item.lng) {
-        const arr = dayMap.get(s.dayIndex) || [];
-        arr.push({
-          lat: item.lat,
-          lng: item.lng,
-          title: item.title,
-          dayIndex: s.dayIndex,
-          type: item.type,
-        });
-        dayMap.set(s.dayIndex, arr);
-      }
+  // useMemo 稳定 allLocations 引用：仅行程/住宿数据变化时重建，避免父组件普通重渲染触发 MapView 反复重建 + 动画重播
+  const allLocations = useMemo<MapLocation[]>(() => {
+    const dayMap = new Map<number, MapLocation[]>();
+    const dayDateMap = new Map<number, string>();
+    trip.schedules?.forEach((s) => {
+      dayDateMap.set(s.dayIndex, s.date);
+      s.items?.forEach((item) => {
+        if (item.lat && item.lng) {
+          const arr = dayMap.get(s.dayIndex) || [];
+          arr.push({
+            lat: item.lat,
+            lng: item.lng,
+            title: item.title,
+            dayIndex: s.dayIndex,
+            type: item.type,
+          });
+          dayMap.set(s.dayIndex, arr);
+        }
+      });
     });
-  });
-  trip.accommodations?.forEach((a) => {
-    if (!(a.lat && a.lng)) return;
-    let targetDay: number | undefined;
-    dayDateMap.forEach((date, day) => {
-      if (date && a.checkInDate && date.slice(0, 10) === a.checkInDate.slice(0, 10)) targetDay = day;
+    trip.accommodations?.forEach((a) => {
+      if (!(a.lat && a.lng)) return;
+      let targetDay: number | undefined;
+      dayDateMap.forEach((date, day) => {
+        if (date && a.checkInDate && date.slice(0, 10) === a.checkInDate.slice(0, 10)) targetDay = day;
+      });
+      const loc: MapLocation = {
+        lat: a.lat,
+        lng: a.lng,
+        title: a.name,
+        dayIndex: targetDay ?? 0,
+        type: "hotel",
+      };
+      const key = targetDay ?? 0;
+      const arr = dayMap.get(key) || [];
+      arr.push(loc);
+      dayMap.set(key, arr);
     });
-    const loc: MapLocation = {
-      lat: a.lat,
-      lng: a.lng,
-      title: a.name,
-      dayIndex: targetDay ?? 0,
-      type: "hotel",
-    };
-    const key = targetDay ?? 0;
-    const arr = dayMap.get(key) || [];
-    arr.push(loc);
-    dayMap.set(key, arr);
-  });
-  const sortedDays = [...dayMap.keys()].sort((x, y) => x - y);
-  const allLocations = sortedDays.flatMap((d) => dayMap.get(d)!);
+    const sortedDays = [...dayMap.keys()].sort((x, y) => x - y);
+    return sortedDays.flatMap((d) => dayMap.get(d)!);
+  }, [trip.schedules, trip.accommodations]);
 
   const dayOptions = trip.schedules?.map((s) => s.dayIndex) || [];
-  const filtered =
-    filterDay === "all"
-      ? allLocations
-      : allLocations.filter((l) => (l.dayIndex || 0) === filterDay);
+  const filtered = useMemo<MapLocation[]>(
+    () =>
+      filterDay === "all"
+        ? allLocations
+        : allLocations.filter((l) => (l.dayIndex || 0) === filterDay),
+    [allLocations, filterDay]
+  );
 
   return (
     <div>
