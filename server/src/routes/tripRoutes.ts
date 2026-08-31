@@ -70,48 +70,51 @@ router.post(
     }
 
     const tripRepo = AppDataSource.getRepository(Trip);
-    const memberRepo = AppDataSource.getRepository(TripMember);
-    const scheduleRepo = AppDataSource.getRepository(DailySchedule);
 
-    const trip = tripRepo.create({
-      title,
-      description,
-      startDate,
-      endDate,
-      destination,
-      coverImage,
-      inviteCode: generateInviteCode(),
-      status: "planning",
-    });
-    await tripRepo.save(trip);
-
-    const member = memberRepo.create({
-      tripId: trip.id,
-      userId,
-      role: "owner",
-    });
-    await memberRepo.save(member);
-
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const dayCount =
-      Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
-      1;
-
-    for (let i = 0; i < dayCount; i++) {
-      const date = new Date(start);
-      date.setDate(date.getDate() + i);
-      const schedule = scheduleRepo.create({
-        tripId: trip.id,
-        dayIndex: i + 1,
-        date: date.toISOString().split("T")[0],
-        title: `第${i + 1}天`,
+    // 事务包裹：trip + owner 成员 + N 天日程，中途失败整体回滚，避免脏数据
+    const tripId = await AppDataSource.transaction(async (manager) => {
+      const trip = manager.create(Trip, {
+        title,
+        description,
+        startDate,
+        endDate,
+        destination,
+        coverImage,
+        inviteCode: generateInviteCode(),
+        status: "planning",
       });
-      await scheduleRepo.save(schedule);
-    }
+      await manager.save(trip);
+
+      const member = manager.create(TripMember, {
+        tripId: trip.id,
+        userId,
+        role: "owner",
+      });
+      await manager.save(member);
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const dayCount =
+        Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
+        1;
+
+      for (let i = 0; i < dayCount; i++) {
+        const date = new Date(start);
+        date.setDate(date.getDate() + i);
+        const schedule = manager.create(DailySchedule, {
+          tripId: trip.id,
+          dayIndex: i + 1,
+          date: date.toISOString().split("T")[0],
+          title: `第${i + 1}天`,
+        });
+        await manager.save(schedule);
+      }
+
+      return trip.id;
+    });
 
     const fullTrip = await tripRepo.findOne({
-      where: { id: trip.id },
+      where: { id: tripId },
       relations: ["members", "members.user", "schedules", "schedules.items"],
     });
     res.status(201).json(fullTrip);

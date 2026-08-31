@@ -2,12 +2,12 @@ import { Router, Request, Response } from "express";
 import { AppDataSource } from "../database";
 import { Expense } from "../entities/Expense";
 import { TripMember } from "../entities/TripMember";
-import { requireTripMember } from "../middleware/auth";
+import { requireTripMember, requireTripEditor } from "../middleware/auth";
 import { asyncHandler } from "../middleware/asyncHandler";
 
 const router = Router({ mergeParams: true });
 
-// 该路由组下所有操作都要求当前用户是计划成员
+// 该路由组下所有操作都要求当前用户是计划成员；写操作在各端点追加 editor 校验
 router.use(requireTripMember);
 
 // ==================== 花费记录 ====================
@@ -25,6 +25,7 @@ router.get(
 
 router.post(
   "/",
+  requireTripEditor,
   asyncHandler(async (req: Request, res: Response) => {
     const { title, category, amount, payerId, participantIds, expenseDate, notes } =
       req.body;
@@ -58,9 +59,12 @@ router.post(
 
 router.patch(
   "/:id",
+  requireTripEditor,
   asyncHandler(async (req: Request, res: Response) => {
     const repo = AppDataSource.getRepository(Expense);
-    const item = await repo.findOne({ where: { id: req.params.id } });
+    const item = await repo.findOne({
+      where: { id: req.params.id, tripId: req.params.tripId },
+    });
     if (!item) return res.status(404).json({ error: "花费记录不存在" });
 
     const { title, category, amount, payerId, participantIds, expenseDate, notes } =
@@ -91,12 +95,14 @@ router.patch(
 
 router.delete(
   "/:id",
+  requireTripEditor,
   asyncHandler(async (req: Request, res: Response) => {
     const repo = AppDataSource.getRepository(Expense);
-    const result = await repo.delete(req.params.id);
-    if (result.affected === 0) {
-      return res.status(404).json({ error: "花费记录不存在" });
-    }
+    const item = await repo.findOne({
+      where: { id: req.params.id, tripId: req.params.tripId },
+    });
+    if (!item) return res.status(404).json({ error: "花费记录不存在" });
+    await repo.remove(item);
     res.status(204).send();
   })
 );
@@ -116,8 +122,7 @@ router.get(
     ]);
 
     const totalAmount = expenses.reduce((acc, e) => acc + (e.amount || 0), 0);
-    const participantCount = members.length || 1;
-    const perCapita = totalAmount / participantCount;
+    const memberCount = members.length || 1;
 
     const stats: Record<
       string,
@@ -158,10 +163,18 @@ router.get(
       stats[uid].net = stats[uid].paid - stats[uid].owed;
     }
 
+    // 人均按"实际参与分摊的成员数"计算，与逐笔分摊口径一致；
+    // 无花费或无参与记录时回退为全体成员数
+    const participantCount =
+      Object.values(stats).filter((s) => s.owed > 0 || s.paid > 0).length ||
+      memberCount;
+    const perCapita = totalAmount / participantCount;
+
     res.json({
       total: totalAmount,
       perCapita,
-      memberCount: participantCount,
+      memberCount,
+      participantCount,
       items: Object.values(stats),
     });
   })

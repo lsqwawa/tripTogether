@@ -58,7 +58,12 @@ router.post(
     const trimmed = nickname.trim().slice(0, 20);
     const userRepo = AppDataSource.getRepository(User);
 
-    const user = await userRepo.findOne({ where: { nickname: trimmed } });
+    // password 列默认不查询（select:false），登录时显式取出
+    const user = await userRepo
+      .createQueryBuilder("user")
+      .addSelect("user.password")
+      .where("user.nickname = :nickname", { nickname: trimmed })
+      .getOne();
     if (!user) {
       return res.status(404).json({ error: "用户不存在，请先注册" });
     }

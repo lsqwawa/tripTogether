@@ -755,11 +755,8 @@ export default function Guide() {
             message="当前版本限制"
             description={
               <ul style={{ paddingLeft: 20, margin: 0 }}>
-                <li>无用户认证：使用匿名随机用户身份，切换浏览器/设备会生成新身份</li>
                 <li>无实时协作：多人同时编辑需要手动刷新页面才能看到对方改动</li>
-                <li>无地图集成：地点字段是纯文本，还没有地图标注和路线总览</li>
                 <li>无导出功能：行程总览只能在页面上查看，暂不支持导出 PDF</li>
-                <li>无删除计划：目前不支持从前端删除整个旅行计划（API 支持）</li>
               </ul>
             }
           />

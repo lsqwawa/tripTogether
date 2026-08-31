@@ -18,7 +18,8 @@ export class User {
   @Column({ type: "varchar", nullable: true })
   avatar: string;
 
-  @Column({ type: "varchar", nullable: true })
+  // select:false 防止默认查询带出密码哈希（详情/分享接口会级联返回 members.user）
+  @Column({ type: "varchar", nullable: true, select: false })
   password: string;
 
   @CreateDateColumn()

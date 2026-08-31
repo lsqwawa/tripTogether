@@ -33,6 +33,7 @@ import {
 interface Props {
   trip: Trip;
   onUpdate: () => void;
+  readOnly?: boolean;
 }
 
 function parseParticipants(json?: string): string[] {
@@ -44,7 +45,7 @@ function parseParticipants(json?: string): string[] {
   }
 }
 
-export default function ExpensesTab({ trip, onUpdate }: Props) {
+export default function ExpensesTab({ trip, onUpdate, readOnly = false }: Props) {
   const { message } = AntApp.useApp();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [stats, setStats] = useState<ExpenseStats | null>(null);
@@ -172,7 +173,7 @@ export default function ExpensesTab({ trip, onUpdate }: Props) {
         <div className="expense-stat-card">
           <div className="stat-label">参与成员</div>
           <div className="stat-value" style={{ color: "#1677ff" }}>
-            {stats?.memberCount || members.length || 0} 人
+            {stats?.participantCount || stats?.memberCount || members.length || 0} 人
           </div>
         </div>
         <div className="expense-stat-card">
@@ -185,14 +186,16 @@ export default function ExpensesTab({ trip, onUpdate }: Props) {
 
       <div className="flex-between mb-12" style={{ flexWrap: "wrap", gap: 8 }}>
         <h3 style={{ margin: 0 }}>💰 花费记录</h3>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={openAdd}
-          disabled={members.length === 0}
-        >
-          添加花费
-        </Button>
+        {!readOnly && (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openAdd}
+            disabled={members.length === 0}
+          >
+            添加花费
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -305,23 +308,27 @@ export default function ExpensesTab({ trip, onUpdate }: Props) {
                   }}
                 >
                   <div className="expense-amount">¥{e.amount.toFixed(2)}</div>
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<EditOutlined />}
-                    onClick={() => openEdit(e)}
-                  />
-                  <Popconfirm
-                    title="确认删除？"
-                    onConfirm={() => handleDelete(e)}
-                  >
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                    />
-                  </Popconfirm>
+                  {!readOnly && (
+                    <>
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<EditOutlined />}
+                        onClick={() => openEdit(e)}
+                      />
+                      <Popconfirm
+                        title="确认删除？"
+                        onConfirm={() => handleDelete(e)}
+                      >
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                        />
+                      </Popconfirm>
+                    </>
+                  )}
                 </div>
               </div>
             );

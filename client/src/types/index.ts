@@ -4,7 +4,6 @@ export interface User {
   id: string;
   nickname: string;
   avatar?: string;
-  password?: string;
   createdAt: string;
 }
 
@@ -58,6 +57,7 @@ export interface ExpenseStats {
   total: number;
   perCapita: number;
   memberCount: number;
+  participantCount?: number;
   items: ExpenseStatsItem[];
 }
 

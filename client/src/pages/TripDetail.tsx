@@ -92,9 +92,9 @@ export default function TripDetail() {
   const [membersModalOpen, setMembersModalOpen] = useState(false);
   const [editForm] = Form.useForm();
   const currentUser = useUserStore((s) => s.user);
-  const isOwner = !!trip?.members?.some(
-    (m) => m.role === "owner" && m.userId === currentUser?.id
-  );
+  const myMembership = trip?.members?.find((m) => m.userId === currentUser?.id);
+  const isOwner = myMembership?.role === "owner";
+  const canEdit = isOwner || myMembership?.role === "editor";
 
   const loadTrip = useCallback(async () => {
     if (!tripId) return;
@@ -207,25 +207,29 @@ export default function TripDetail() {
             >
               分享链接
             </Button>
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              onClick={openEditModal}
-            >
-              编辑
-            </Button>
-            <Popconfirm
-              title="确认删除这个旅行计划？"
-              description="所有日程、交通、住宿、花费数据将一并删除，此操作不可撤销。"
-              onConfirm={handleDelete}
-              okText="确认删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-            >
-              <Button size="small" danger icon={<DeleteOutlined />}>
-                删除
-              </Button>
-            </Popconfirm>
+            {isOwner && (
+              <>
+                <Button
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={openEditModal}
+                >
+                  编辑
+                </Button>
+                <Popconfirm
+                  title="确认删除这个旅行计划？"
+                  description="所有日程、交通、住宿、花费数据将一并删除，此操作不可撤销。"
+                  onConfirm={handleDelete}
+                  okText="确认删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button size="small" danger icon={<DeleteOutlined />}>
+                    删除
+                  </Button>
+                </Popconfirm>
+              </>
+            )}
           </Space>
         </div>
 
@@ -343,6 +347,23 @@ export default function TripDetail() {
         )}
       </div>
 
+      {/* 查看者只读提示 */}
+      {!canEdit && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "8px 12px",
+            background: "#fffbe6",
+            border: "1px solid #ffe58f",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#874d00",
+          }}
+        >
+          你当前是查看者，仅可浏览行程内容，无法编辑；如需修改请联系创建者调整角色。
+        </div>
+      )}
+
       {/* 进度看板 */}
       <ProgressBoard trip={trip} />
 
@@ -358,22 +379,34 @@ export default function TripDetail() {
           {
             key: "schedule",
             label: "📅 每日日程",
-            children: <ScheduleTab trip={trip} onUpdate={loadTrip} />,
+            children: (
+              <ScheduleTab trip={trip} onUpdate={loadTrip} readOnly={!canEdit} />
+            ),
           },
           {
             key: "transport",
             label: "🚗 交通",
-            children: <TransportTab trip={trip} onUpdate={loadTrip} />,
+            children: (
+              <TransportTab trip={trip} onUpdate={loadTrip} readOnly={!canEdit} />
+            ),
           },
           {
             key: "accommodation",
             label: "🏨 住宿",
-            children: <AccommodationTab trip={trip} onUpdate={loadTrip} />,
+            children: (
+              <AccommodationTab
+                trip={trip}
+                onUpdate={loadTrip}
+                readOnly={!canEdit}
+              />
+            ),
           },
           {
             key: "expense",
             label: "💰 花费",
-            children: <ExpensesTab trip={trip} onUpdate={loadTrip} />,
+            children: (
+              <ExpensesTab trip={trip} onUpdate={loadTrip} readOnly={!canEdit} />
+            ),
           },
           {
             key: "map",
@@ -455,14 +488,16 @@ function SortableScheduleItem({
   onEdit,
   onDelete,
   onToggle,
+  readOnly,
 }: {
   item: ScheduleItem;
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  readOnly: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: item.id });
+    useSortable({ id: item.id, disabled: readOnly });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -472,13 +507,15 @@ function SortableScheduleItem({
 
   return (
     <div ref={setNodeRef} style={style} className="schedule-item">
-      <span
-        {...attributes}
-        {...listeners}
-        style={{ cursor: "grab", flexShrink: 0, marginTop: 2, color: "#ccc" }}
-      >
-        <HolderOutlined />
-      </span>
+      {!readOnly && (
+        <span
+          {...attributes}
+          {...listeners}
+          style={{ cursor: "grab", flexShrink: 0, marginTop: 2, color: "#ccc" }}
+        >
+          <HolderOutlined />
+        </span>
+      )}
       <span className="schedule-item-icon">
         {ITEM_TYPE_ICONS[item.type]}
       </span>
@@ -529,26 +566,28 @@ function SortableScheduleItem({
           </div>
         )}
       </div>
-      <div className="schedule-item-actions">
-        <Tooltip title={item.status === "done" ? "取消完成" : "标记完成"}>
+      {!readOnly && (
+        <div className="schedule-item-actions">
+          <Tooltip title={item.status === "done" ? "取消完成" : "标记完成"}>
+            <Button
+              size="small"
+              type="text"
+              icon={<CheckCircleOutlined />}
+              onClick={onToggle}
+              style={{ color: item.status === "done" ? "#52c41a" : "#ccc" }}
+            />
+          </Tooltip>
           <Button
             size="small"
             type="text"
-            icon={<CheckCircleOutlined />}
-            onClick={onToggle}
-            style={{ color: item.status === "done" ? "#52c41a" : "#ccc" }}
+            icon={<EditOutlined />}
+            onClick={onEdit}
           />
-        </Tooltip>
-        <Button
-          size="small"
-          type="text"
-          icon={<EditOutlined />}
-          onClick={onEdit}
-        />
-        <Popconfirm title="确认删除？" onConfirm={onDelete}>
-          <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
-      </div>
+          <Popconfirm title="确认删除？" onConfirm={onDelete}>
+            <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </div>
+      )}
     </div>
   );
 }
@@ -558,9 +597,11 @@ function SortableScheduleItem({
 function ScheduleTab({
   trip,
   onUpdate,
+  readOnly,
 }: {
   trip: Trip;
   onUpdate: () => void;
+  readOnly: boolean;
 }) {
   const { message } = AntApp.useApp();
   const [modalOpen, setModalOpen] = useState(false);
@@ -744,14 +785,16 @@ function ScheduleTab({
                   {dayjs(schedule.date).format("MM月DD日 ddd")}
                 </span>
               </div>
-              <Button
-                size="small"
-                type="dashed"
-                icon={<PlusOutlined />}
-                onClick={() => openAddModal(schedule.id)}
-              >
-                添加
-              </Button>
+              {!readOnly && (
+                <Button
+                  size="small"
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={() => openAddModal(schedule.id)}
+                >
+                  添加
+                </Button>
+              )}
             </div>
             {items.length > 0 ? (
               <DndContext
@@ -770,6 +813,7 @@ function ScheduleTab({
                       onEdit={() => openEditModal(item)}
                       onDelete={() => handleDelete(item)}
                       onToggle={() => toggleStatus(item)}
+                      readOnly={readOnly}
                     />
                   ))}
                 </SortableContext>
@@ -782,7 +826,7 @@ function ScheduleTab({
                   color: "#d1d5db",
                 }}
               >
-                还没有安排，点击右上角"添加"开始规划
+                {readOnly ? "这一天还没有安排" : "还没有安排，点击右上角\"添加\"开始规划"}
               </div>
             )}
           </div>
@@ -1012,9 +1056,11 @@ function ScheduleTab({
 function TransportTab({
   trip,
   onUpdate,
+  readOnly,
 }: {
   trip: Trip;
   onUpdate: () => void;
+  readOnly: boolean;
 }) {
   const { message } = AntApp.useApp();
   const [modalOpen, setModalOpen] = useState(false);
@@ -1179,14 +1225,16 @@ function TransportTab({
           <h3 style={{ margin: 0 }}>
             {icon} {label}
           </h3>
-          <Button
-            size="small"
-            type="dashed"
-            icon={<PlusOutlined />}
-            onClick={() => openAdd(type)}
-          >
-            添加
-          </Button>
+          {!readOnly && (
+            <Button
+              size="small"
+              type="dashed"
+              icon={<PlusOutlined />}
+              onClick={() => openAdd(type)}
+            >
+              添加
+            </Button>
+          )}
         </div>
         {items.length === 0 ? (
           <div
@@ -1206,16 +1254,20 @@ function TransportTab({
               key={item.id}
               size="small"
               style={{ marginBottom: 8 }}
-              actions={[
-                <Popconfirm
-                  key="delete"
-                  title="确认删除？"
-                  onConfirm={() => handleDelete(item.id)}
-                >
-                  <DeleteOutlined key="del" />
-                </Popconfirm>,
-                <EditOutlined key="edit" onClick={() => openEdit(item)} />,
-              ]}
+              actions={
+                readOnly
+                  ? undefined
+                  : [
+                      <Popconfirm
+                        key="delete"
+                        title="确认删除？"
+                        onConfirm={() => handleDelete(item.id)}
+                      >
+                        <DeleteOutlined key="del" />
+                      </Popconfirm>,
+                      <EditOutlined key="edit" onClick={() => openEdit(item)} />,
+                    ]
+              }
             >
               <div
                 style={{
@@ -1499,9 +1551,11 @@ function TransportTab({
 function AccommodationTab({
   trip,
   onUpdate,
+  readOnly,
 }: {
   trip: Trip;
   onUpdate: () => void;
+  readOnly: boolean;
 }) {
   const { message } = AntApp.useApp();
   const [modalOpen, setModalOpen] = useState(false);
@@ -1583,9 +1637,11 @@ function AccommodationTab({
         style={{ flexWrap: "wrap", gap: 8 }}
       >
         <h3 style={{ margin: 0 }}>🏨 住宿安排</h3>
-        <Button type="dashed" icon={<PlusOutlined />} onClick={openAdd}>
-          添加住宿
-        </Button>
+        {!readOnly && (
+          <Button type="dashed" icon={<PlusOutlined />} onClick={openAdd}>
+            添加住宿
+          </Button>
+        )}
       </div>
       {!trip.accommodations || trip.accommodations.length === 0 ? (
         <div
@@ -1605,16 +1661,20 @@ function AccommodationTab({
             key={item.id}
             size="small"
             style={{ marginBottom: 8 }}
-            actions={[
-              <Popconfirm
-                key="delete"
-                title="确认删除？"
-                onConfirm={() => handleDelete(item.id)}
-              >
-                <DeleteOutlined key="del" />
-              </Popconfirm>,
-              <EditOutlined key="edit" onClick={() => openEdit(item)} />,
-            ]}
+            actions={
+              readOnly
+                ? undefined
+                : [
+                    <Popconfirm
+                      key="delete"
+                      title="确认删除？"
+                      onConfirm={() => handleDelete(item.id)}
+                    >
+                      <DeleteOutlined key="del" />
+                    </Popconfirm>,
+                    <EditOutlined key="edit" onClick={() => openEdit(item)} />,
+                  ]
+            }
           >
             <div
               style={{

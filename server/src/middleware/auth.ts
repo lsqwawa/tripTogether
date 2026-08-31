@@ -42,6 +42,21 @@ export const requireTripMember = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * 校验当前成员具有编辑权限（owner / editor），viewer 仅可读。
+ * 必须挂在 requireTripMember 之后，依赖其注入的 req.tripMember。
+ */
+export const requireTripEditor = asyncHandler(async (req, res, next) => {
+  const member = req.tripMember;
+  if (!member) {
+    return res.status(403).json({ error: "你不是该计划的成员，无权访问" });
+  }
+  if (member.role === "viewer") {
+    return res.status(403).json({ error: "查看者仅可浏览行程，无权修改内容" });
+  }
+  next();
+});
+
+/**
  * 校验当前登录用户是否为该 trip 的 owner（创建者）。
  * 用于修改/删除计划等高危操作。
  */
