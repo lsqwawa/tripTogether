@@ -57,6 +57,25 @@ export class Transportation {
   @Column({ type: "float", nullable: true })
   arrLng: number;
 
+  // ===== 城际匹配草稿字段（交通信息匹配）=====
+  @Column({ type: "float", nullable: true })
+  distanceM: number;
+
+  @Column({ type: "float", nullable: true })
+  durationMin: number;
+
+  @Column({ type: "text", nullable: true })
+  polyline: string; // GCJ-02 坐标点 JSON
+
+  @Column({ type: "varchar", nullable: true })
+  fromItemId: string; // 关联起点 ScheduleItem
+
+  @Column({ type: "varchar", nullable: true })
+  toItemId: string; // 关联终点 ScheduleItem
+
+  @Column({ type: "boolean", default: false })
+  matched: boolean; // true=系统生成的建议草稿，待用户确认
+
   @ManyToOne(() => Trip, (trip) => trip.transportations, { onDelete: "CASCADE" })
   @JoinColumn({ name: "tripId" })
   trip: Trip;

@@ -749,3 +749,19 @@ body {
     font-size: 18px;
   }
 }
+
+/* ===== 移动端专项（2026-08-31） ===== */
+/* 弹窗在窄屏不溢出：antd Modal 定宽 520/600 在 <560px 视口会被 max-width 收敛 */
+.ant-modal {
+  max-width: calc(100vw - 32px);
+}
+
+/* 日程卡片在小屏减少内边距，给内容更多空间 */
+@media (max-width: 480px) {
+  .day-card {
+    padding: 12px;
+  }
+  .schedule-item {
+    padding: 8px 6px;
+  }
+}

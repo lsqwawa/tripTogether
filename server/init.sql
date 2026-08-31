@@ -84,7 +84,13 @@ CREATE TABLE IF NOT EXISTS transportations (
   "depLat"       double precision,
   "depLng"       double precision,
   "arrLat"       double precision,
-  "arrLng"       double precision
+  "arrLng"       double precision,
+  "distanceM"    double precision,
+  "durationMin"  double precision,
+  polyline       text,
+  "fromItemId"   varchar,
+  "toItemId"     varchar,
+  matched        boolean NOT NULL DEFAULT false
 );
 
 -- 住宿
@@ -131,6 +137,12 @@ CREATE TABLE IF NOT EXISTS schedule_items (
   notes            text,
   "imageUrl"       varchar,
   "transportToNext" varchar,
+  "legMode"        varchar,
+  "legDistanceM"   double precision,
+  "legDurationMin" double precision,
+  "legPolyline"    text,
+  "legSummary"     varchar,
+  "legAutoMatched" boolean NOT NULL DEFAULT false,
   status           varchar NOT NULL DEFAULT 'pending',
   "version"        integer NOT NULL DEFAULT 1                 -- 乐观锁：编辑冲突检测(8.2)
 );
@@ -149,6 +161,17 @@ CREATE TABLE IF NOT EXISTS expenses (
   "createdAt"    timestamp NOT NULL DEFAULT now()
 );
 
+-- 行李清单（出行配套工具箱）
+CREATE TABLE IF NOT EXISTS checklist_items (
+  id          uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  "tripId"    uuid    NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  name        varchar(60) NOT NULL,
+  category    varchar NOT NULL DEFAULT 'other',             -- documents | clothing | electronics | toiletries | medicine | other
+  checked     boolean NOT NULL DEFAULT false,
+  "sortOrder" integer NOT NULL DEFAULT 0,
+  "createdAt" timestamp NOT NULL DEFAULT now()
+);
+
 -- =============================================================================
 -- 5) 常用索引（提升按计划/成员/天查询的性能；已存在则跳过）
 -- =============================================================================
@@ -160,6 +183,7 @@ CREATE INDEX IF NOT EXISTS idx_daily_schedules_trip ON daily_schedules("tripId")
 CREATE INDEX IF NOT EXISTS idx_schedule_items_sched ON schedule_items("scheduleId");
 CREATE INDEX IF NOT EXISTS idx_schedule_items_trip  ON schedule_items("tripId");
 CREATE INDEX IF NOT EXISTS idx_expenses_trip        ON expenses("tripId");
+CREATE INDEX IF NOT EXISTS idx_checklist_trip       ON checklist_items("tripId");
 
 -- =============================================================================
 -- 6) 增量更新区（schema 变更时在此追加，保持 IF NOT EXISTS 使其可重复执行）
@@ -175,6 +199,20 @@ ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "depLat" double precision;
 ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "depLng" double precision;
 ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "arrLat" double precision;
 ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "arrLng" double precision;
+-- -----------------------------------------------------------------------------
+-- 2026-08-31 追加：交通信息匹配（结构化接驳 + 城际草稿）。
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legMode" varchar;
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legDistanceM" double precision;
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legDurationMin" double precision;
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legPolyline" text;
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legSummary" varchar;
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legAutoMatched" boolean NOT NULL DEFAULT false;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "distanceM" double precision;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "durationMin" double precision;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS polyline text;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "fromItemId" varchar;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "toItemId" varchar;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS matched boolean NOT NULL DEFAULT false;
 -- =============================================================================
 
 -- 完成提示

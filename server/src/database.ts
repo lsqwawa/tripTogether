@@ -9,6 +9,7 @@ import { Accommodation } from "./entities/Accommodation";
 import { DailySchedule } from "./entities/DailySchedule";
 import { ScheduleItem } from "./entities/ScheduleItem";
 import { Expense } from "./entities/Expense";
+import { ChecklistItem } from "./entities/ChecklistItem";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -28,5 +29,6 @@ export const AppDataSource = new DataSource({
     DailySchedule,
     ScheduleItem,
     Expense,
+    ChecklistItem,
   ],
 });

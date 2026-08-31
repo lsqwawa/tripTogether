@@ -40,6 +40,12 @@ const TRANSPORTATION_FIELDS = [
   "depLng",
   "arrLat",
   "arrLng",
+  "distanceM",
+  "durationMin",
+  "polyline",
+  "fromItemId",
+  "toItemId",
+  "matched",
 ] as const;
 
 const ACCOMMODATION_FIELDS = [
@@ -72,6 +78,12 @@ const ITEM_FIELDS = [
   "imageUrl",
   "transportToNext",
   "status",
+  "legMode",
+  "legDistanceM",
+  "legDurationMin",
+  "legPolyline",
+  "legSummary",
+  "legAutoMatched",
 ] as const;
 
 // ==================== 交通 ====================

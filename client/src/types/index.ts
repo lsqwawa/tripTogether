@@ -32,6 +32,33 @@ export type ExpenseCategory =
   | "shopping"
   | "other";
 
+export interface ChecklistItem {
+  id: string;
+  tripId: string;
+  name: string;
+  category: ChecklistCategory | string;
+  checked: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export type ChecklistCategory =
+  | "documents"
+  | "clothing"
+  | "electronics"
+  | "toiletries"
+  | "medicine"
+  | "other";
+
+export interface WeatherDay {
+  date: string;
+  text: string;
+  icon: string;
+  tmax: number;
+  tmin: number;
+  precipProb?: number | null;
+}
+
 export interface Expense {
   id: string;
   tripId: string;
@@ -106,6 +133,12 @@ export interface Transportation {
   depLng?: number;
   arrLat?: number;
   arrLng?: number;
+  distanceM?: number;
+  durationMin?: number;
+  polyline?: string;
+  fromItemId?: string;
+  toItemId?: string;
+  matched?: boolean;
 }
 
 export interface Accommodation {
@@ -150,6 +183,12 @@ export interface ScheduleItem {
   notes?: string;
   imageUrl?: string;
   transportToNext?: string;
+  legMode?: "walking" | "driving" | "transit" | "intercity" | "none" | null;
+  legDistanceM?: number;
+  legDurationMin?: number;
+  legPolyline?: string;
+  legSummary?: string;
+  legAutoMatched?: boolean;
   status: PlanStatus;
   version?: number;
 }
@@ -237,4 +276,22 @@ export const EXPENSE_CATEGORY_COLORS: Record<string, string> = {
   ticket: "cyan",
   shopping: "magenta",
   other: "default",
+};
+
+export const CHECKLIST_CATEGORY_LABELS: Record<string, string> = {
+  documents: "证件财务",
+  clothing: "衣物",
+  electronics: "电子设备",
+  toiletries: "洗漱护理",
+  medicine: "药品",
+  other: "其他",
+};
+
+export const CHECKLIST_CATEGORY_ICONS: Record<string, string> = {
+  documents: "🪪",
+  clothing: "👕",
+  electronics: "🔌",
+  toiletries: "🧴",
+  medicine: "💊",
+  other: "🎒",
 };

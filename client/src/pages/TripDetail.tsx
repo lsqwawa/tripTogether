@@ -37,7 +37,7 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { tripApi, scheduleApi, transportApi, accommodationApi, transportLookupApi, uploadApi } from "../api";
+import { tripApi, scheduleApi, transportApi, accommodationApi, transportLookupApi, uploadApi, weatherApi } from "../api";
 import type {
   Trip,
   ScheduleItem,
@@ -56,17 +56,21 @@ import {
 } from "../types";
 import ProgressBoard from "../components/ProgressBoard";
 import ExpensesTab from "../components/ExpensesTab";
+import ChecklistTab from "../components/ChecklistTab";
 import MapView, { DAY_COLORS, toIntercitySegments } from "../components/MapView";
 import type { MapLocation } from "../components/MapView";
 import LocationPicker from "../components/LocationPicker";
 import MapPicker from "../components/MapPicker";
 import MembersModal from "../components/MembersModal";
+import ExportTripImage from "../components/ExportTripImage";
 import { geocodePlace } from "../utils/tencentMap";
 import { useUserStore } from "../stores/userStore";
+import type { WeatherDay } from "../types";
 import {
   DndContext,
   closestCenter,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -111,6 +115,62 @@ export default function TripDetail() {
   useEffect(() => {
     loadTrip();
   }, [loadTrip]);
+
+  // 目的地逐日天气（展示在每日日程卡头）；任何失败静默降级
+  const [weatherByDate, setWeatherByDate] = useState<Record<string, WeatherDay>>(
+    {}
+  );
+  const tripIdForWeather = trip?.id;
+  useEffect(() => {
+    if (!trip) return;
+    let cancelled = false;
+    (async () => {
+      let lat: number | undefined;
+      let lng: number | undefined;
+      const acc = trip.accommodations?.find((a) => a.lat && a.lng);
+      if (acc) {
+        lat = acc.lat!;
+        lng = acc.lng!;
+      }
+      if (lat == null) {
+        const item = trip.schedules
+          ?.flatMap((s) => s.items || [])
+          .find((i) => i.lat && i.lng);
+        if (item) {
+          lat = item.lat!;
+          lng = item.lng!;
+        }
+      }
+      if (lat == null && trip.destination) {
+        const g = await geocodePlace(trip.destination);
+        if (g) {
+          lat = g.lat;
+          lng = g.lng;
+        }
+      }
+      if (lat == null || lng == null) return;
+      try {
+        const days = await weatherApi.daily({
+          lat,
+          lng,
+          start: trip.startDate,
+          end: trip.endDate,
+        });
+        if (cancelled) return;
+        const map: Record<string, WeatherDay> = {};
+        days.forEach((d) => {
+          map[d.date] = d;
+        });
+        setWeatherByDate(map);
+      } catch {
+        // 静默降级：不阻塞主流程
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripIdForWeather]);
 
   if (loading) {
     return (
@@ -207,6 +267,7 @@ export default function TripDetail() {
             >
               分享链接
             </Button>
+            <ExportTripImage trip={trip} weather={weatherByDate} />
             {isOwner && (
               <>
                 <Button
@@ -380,7 +441,12 @@ export default function TripDetail() {
             key: "schedule",
             label: "📅 每日日程",
             children: (
-              <ScheduleTab trip={trip} onUpdate={loadTrip} readOnly={!canEdit} />
+              <ScheduleTab
+                trip={trip}
+                onUpdate={loadTrip}
+                readOnly={!canEdit}
+                weather={weatherByDate}
+              />
             ),
           },
           {
@@ -407,6 +473,11 @@ export default function TripDetail() {
             children: (
               <ExpensesTab trip={trip} onUpdate={loadTrip} readOnly={!canEdit} />
             ),
+          },
+          {
+            key: "checklist",
+            label: "🧳 行李清单",
+            children: <ChecklistTab trip={trip} readOnly={!canEdit} />,
           },
           {
             key: "map",
@@ -511,7 +582,13 @@ function SortableScheduleItem({
         <span
           {...attributes}
           {...listeners}
-          style={{ cursor: "grab", flexShrink: 0, marginTop: 2, color: "#ccc" }}
+          style={{
+            cursor: "grab",
+            flexShrink: 0,
+            marginTop: 2,
+            color: "#ccc",
+            touchAction: "none",
+          }}
         >
           <HolderOutlined />
         </span>
@@ -598,10 +675,12 @@ function ScheduleTab({
   trip,
   onUpdate,
   readOnly,
+  weather,
 }: {
   trip: Trip;
   onUpdate: () => void;
   readOnly: boolean;
+  weather?: Record<string, WeatherDay>;
 }) {
   const { message } = AntApp.useApp();
   const [modalOpen, setModalOpen] = useState(false);
@@ -617,7 +696,9 @@ function ScheduleTab({
   const imageUrlValue = Form.useWatch("imageUrl", form);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    // 触摸长按 250ms 才进入拖拽，避免与页面滚动冲突（移动端专项）
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } })
   );
 
   // 同步 trip 数据到 local state
@@ -783,6 +864,12 @@ function ScheduleTab({
                 </span>
                 <span className="day-card-date">
                   {dayjs(schedule.date).format("MM月DD日 ddd")}
+                  {weather?.[schedule.date] && (
+                    <span style={{ marginLeft: 8, color: "#6b7280" }}>
+                      {weather[schedule.date].icon} {weather[schedule.date].tmax}°/
+                      {weather[schedule.date].tmin}°
+                    </span>
+                  )}
                 </span>
               </div>
               {!readOnly && (

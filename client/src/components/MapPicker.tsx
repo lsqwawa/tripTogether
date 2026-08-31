@@ -118,7 +118,7 @@ export default function MapPicker({ open, initialLat, initialLng, onConfirm, onC
       ) : (
         <div
           ref={containerRef}
-          style={{ height: 380, borderRadius: 8, overflow: "hidden", border: "1px solid #f0f0f0" }}
+          style={{ height: "min(380px, 55vh)", borderRadius: 8, overflow: "hidden", border: "1px solid #f0f0f0" }}
         />
       )}
       {picked && (

@@ -626,7 +626,7 @@ export default function MapView({ locations, showPolylines = true, intercity = [
     <div
       ref={containerRef}
       style={{
-        height: 420,
+        height: "clamp(320px, 55vh, 520px)",
         borderRadius: 12,
         overflow: "hidden",
         border: "1px solid #f0f0f0",

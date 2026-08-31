@@ -8,6 +8,8 @@ import type {
   ScheduleItem,
   Expense,
   ExpenseStats,
+  ChecklistItem,
+  WeatherDay,
   User,
 } from "../types";
 
@@ -227,5 +229,85 @@ export const expenseApi = {
   stats: (tripId: string) =>
     client
       .get<ExpenseStats>(`/trips/${tripId}/expenses/stats`)
+      .then((r) => r.data),
+};
+
+// ==================== Checklist（行李清单） ====================
+
+export const checklistApi = {
+  list: (tripId: string) =>
+    client.get<ChecklistItem[]>(`/trips/${tripId}/checklist`).then((r) => r.data),
+
+  create: (tripId: string, data: { name: string; category?: string }) =>
+    client
+      .post<ChecklistItem>(`/trips/${tripId}/checklist`, data)
+      .then((r) => r.data),
+
+  addTemplate: (tripId: string) =>
+    client
+      .post<{ added: number }>(`/trips/${tripId}/checklist/template`)
+      .then((r) => r.data),
+
+  update: (
+    tripId: string,
+    id: string,
+    data: { checked?: boolean; name?: string; category?: string }
+  ) =>
+    client
+      .patch<ChecklistItem>(`/trips/${tripId}/checklist/${id}`, data)
+      .then((r) => r.data),
+
+  delete: (tripId: string, id: string) =>
+    client.delete(`/trips/${tripId}/checklist/${id}`).then((r) => r.data),
+};
+
+// ==================== Weather（天气代理） ====================
+
+export const weatherApi = {
+  daily: (params: { lat: number; lng: number; start: string; end: string }) =>
+    client
+      .get<{ days: WeatherDay[] }>("/weather", { params })
+      .then((r) => r.data.days),
+};
+
+// ==================== Transport Match（交通匹配） ====================
+
+export const transportMatchApi = {
+  match: (tripId: string) =>
+    client
+      .post<{
+        legsApplied: number;
+        legsTotal: number;
+        skippedNoCoord: number;
+        intercityDrafts: Transportation[];
+        via: string | null;
+        message?: string;
+      }>(`/trips/${tripId}/match-transport`)
+      .then((r) => r.data),
+
+  legs: (tripId: string) =>
+    client
+      .get<{ legs: ScheduleItem[]; drafts: Transportation[] }>(
+        `/trips/${tripId}/transport-legs`
+      )
+      .then((r) => r.data),
+
+  updateLeg: (
+    tripId: string,
+    itemId: string,
+    data: {
+      legMode?: string;
+      legSummary?: string;
+      legDistanceM?: number;
+      legDurationMin?: number;
+    }
+  ) =>
+    client
+      .patch<ScheduleItem>(`/trips/${tripId}/schedule-items/${itemId}/transport`, data)
+      .then((r) => r.data),
+
+  confirm: (tripId: string, id: string, data?: Partial<Transportation>) =>
+    client
+      .patch<Transportation>(`/trips/${tripId}/transportations/${id}/confirm`, data || {})
       .then((r) => r.data),
 };

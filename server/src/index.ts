@@ -11,6 +11,9 @@ import userRoutes from "./routes/userRoutes";
 import expenseRoutes from "./routes/expenseRoutes";
 import shareRoutes from "./routes/shareRoutes";
 import transportLookupRoutes from "./routes/transportLookup";
+import transportMatchRoutes from "./routes/transportMatchRoutes";
+import checklistRoutes from "./routes/checklistRoutes";
+import weatherRoutes from "./routes/weatherRoutes";
 import uploadRoutes from "./routes/uploadRoutes";
 
 const app = express();
@@ -32,6 +35,11 @@ app.use("/api/users", userRoutes);
 app.use("/api/trips", authenticate, tripRoutes);
 app.use("/api/trips/:tripId", authenticate, planRoutes);
 app.use("/api/trips/:tripId/expenses", authenticate, expenseRoutes);
+app.use("/api/trips/:tripId", authenticate, transportMatchRoutes);
+app.use("/api/trips/:tripId/checklist", authenticate, checklistRoutes);
+
+// 天气代理（公开气象数据，无敏感信息，登录即可用）
+app.use("/api/weather", weatherRoutes);
 
 // 交通班次查询代理（航班/火车）：登录即可用
 app.use("/api/transport-lookup", transportLookupRoutes);
