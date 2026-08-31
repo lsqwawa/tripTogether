@@ -222,4 +222,64 @@ router.get(
   })
 );
 
+// 修改成员角色（仅 owner；可在 editor / viewer 间切换）
+router.patch(
+  "/:tripId/members/:memberId",
+  requireTripOwner,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { role } = req.body;
+    if (!["editor", "viewer"].includes(role)) {
+      return res
+        .status(400)
+        .json({ error: "角色仅支持 editor / viewer（创建者身份不可转让）" });
+    }
+
+    const memberRepo = AppDataSource.getRepository(TripMember);
+    const target = await memberRepo.findOne({
+      where: { id: req.params.memberId, tripId: req.params.tripId },
+    });
+    if (!target) {
+      return res.status(404).json({ error: "成员不存在" });
+    }
+    if (target.role === "owner") {
+      return res.status(403).json({ error: "不能修改创建者的角色" });
+    }
+    if (target.userId === req.user!.id) {
+      return res.status(403).json({ error: "不能修改自己的角色" });
+    }
+
+    target.role = role;
+    await memberRepo.save(target);
+    const updated = await memberRepo.findOne({
+      where: { id: target.id },
+      relations: ["user"],
+    });
+    res.json(updated);
+  })
+);
+
+// 移除成员（仅 owner；不可移除创建者，也不可移除自己）
+router.delete(
+  "/:tripId/members/:memberId",
+  requireTripOwner,
+  asyncHandler(async (req: Request, res: Response) => {
+    const memberRepo = AppDataSource.getRepository(TripMember);
+    const target = await memberRepo.findOne({
+      where: { id: req.params.memberId, tripId: req.params.tripId },
+    });
+    if (!target) {
+      return res.status(404).json({ error: "成员不存在" });
+    }
+    if (target.role === "owner") {
+      return res.status(403).json({ error: "不能移除创建者" });
+    }
+    if (target.userId === req.user!.id) {
+      return res.status(403).json({ error: "不能移除自己，请转让或解散计划" });
+    }
+
+    await memberRepo.remove(target);
+    res.status(204).send();
+  })
+);
+
 export default router;

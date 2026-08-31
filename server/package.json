@@ -15,10 +15,12 @@
     "format:check": "prettier --check \"src/**/*.ts\""
   },
   "dependencies": {
+    "@types/multer": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
     "nanoid": "^5.0.7",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",

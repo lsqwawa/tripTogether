@@ -11,6 +11,7 @@ import userRoutes from "./routes/userRoutes";
 import expenseRoutes from "./routes/expenseRoutes";
 import shareRoutes from "./routes/shareRoutes";
 import transportLookupRoutes from "./routes/transportLookup";
+import uploadRoutes from "./routes/uploadRoutes";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,6 +35,9 @@ app.use("/api/trips/:tripId/expenses", authenticate, expenseRoutes);
 
 // 交通班次查询代理（航班/火车）：登录即可用
 app.use("/api/transport-lookup", transportLookupRoutes);
+
+// 图片上传（登录即可用，内部已挂 authenticate）
+app.use("/api/upload", uploadRoutes);
 
 // 健康检查
 app.get("/api/health", (req, res) => {

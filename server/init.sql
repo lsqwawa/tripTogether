@@ -80,7 +80,11 @@ CREATE TABLE IF NOT EXISTS transportations (
   status         varchar NOT NULL DEFAULT 'pending',
   "bookingInfo"  text,
   notes          text,
-  cost           double precision
+  cost           double precision,
+  "depLat"       double precision,
+  "depLng"       double precision,
+  "arrLat"       double precision,
+  "arrLng"       double precision
 );
 
 -- 住宿
@@ -165,6 +169,12 @@ CREATE INDEX IF NOT EXISTS idx_expenses_trip        ON expenses("tripId");
 -- 2026-08-05 追加：schedule_items 增加乐观锁 version 列（8.2 编辑冲突检测）。
 -- 已存在的库重跑本脚本时，CREATE TABLE 不会改已有表，故用 ALTER 补齐。
 ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "version" integer NOT NULL DEFAULT 1;
+-- -----------------------------------------------------------------------------
+-- 2026-08-28 追加：transportations 增加城际交通两端坐标（6.10 跨城连线）。
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "depLat" double precision;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "depLng" double precision;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "arrLat" double precision;
+ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "arrLng" double precision;
 -- =============================================================================
 
 -- 完成提示

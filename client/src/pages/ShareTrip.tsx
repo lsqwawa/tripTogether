@@ -19,7 +19,7 @@ import {
   ITEM_TYPE_ICONS,
   TRIP_STATUS_LABELS,
 } from "../types";
-import MapView from "../components/MapView";
+import MapView, { toIntercitySegments } from "../components/MapView";
 
 export default function ShareTrip() {
   const { inviteCode } = useParams();
@@ -201,7 +201,10 @@ export default function ShareTrip() {
         {allLocations.length > 0 && (
           <>
             <Divider style={{ margin: "16px 0" }}>🗺️ 地图路线</Divider>
-            <MapView locations={allLocations} />
+            <MapView
+              locations={allLocations}
+              intercity={toIntercitySegments(trip.transportations)}
+            />
           </>
         )}
 
@@ -306,6 +309,19 @@ export default function ShareTrip() {
                   <Tag color={STATUS_COLORS[item.status]} style={{ fontSize: 11 }}>
                     {STATUS_LABELS[item.status]}
                   </Tag>
+                  {item.imageUrl && (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.title}
+                      style={{
+                        width: "100%",
+                        maxHeight: 160,
+                        objectFit: "cover",
+                        borderRadius: 6,
+                        marginTop: 4,
+                      }}
+                    />
+                  )}
                 </div>
               ))
             ) : (

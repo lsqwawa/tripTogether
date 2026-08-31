@@ -45,6 +45,18 @@ export class Transportation {
   @Column({ type: "float", nullable: true })
   cost: number;
 
+  @Column({ type: "float", nullable: true })
+  depLat: number;
+
+  @Column({ type: "float", nullable: true })
+  depLng: number;
+
+  @Column({ type: "float", nullable: true })
+  arrLat: number;
+
+  @Column({ type: "float", nullable: true })
+  arrLng: number;
+
   @ManyToOne(() => Trip, (trip) => trip.transportations, { onDelete: "CASCADE" })
   @JoinColumn({ name: "tripId" })
   trip: Trip;

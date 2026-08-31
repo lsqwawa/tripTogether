@@ -20,6 +20,7 @@ import {
   Tooltip,
   App as AntApp,
   Space,
+  Upload,
 } from "antd";
 import {
   ArrowLeftOutlined,
@@ -32,9 +33,11 @@ import {
   ClockCircleOutlined,
   ShareAltOutlined,
   HolderOutlined,
+  TeamOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { tripApi, scheduleApi, transportApi, accommodationApi, transportLookupApi } from "../api";
+import { tripApi, scheduleApi, transportApi, accommodationApi, transportLookupApi, uploadApi } from "../api";
 import type {
   Trip,
   ScheduleItem,
@@ -53,10 +56,13 @@ import {
 } from "../types";
 import ProgressBoard from "../components/ProgressBoard";
 import ExpensesTab from "../components/ExpensesTab";
-import MapView, { DAY_COLORS } from "../components/MapView";
+import MapView, { DAY_COLORS, toIntercitySegments } from "../components/MapView";
 import type { MapLocation } from "../components/MapView";
 import LocationPicker from "../components/LocationPicker";
 import MapPicker from "../components/MapPicker";
+import MembersModal from "../components/MembersModal";
+import { geocodePlace } from "../utils/tencentMap";
+import { useUserStore } from "../stores/userStore";
 import {
   DndContext,
   closestCenter,
@@ -83,7 +89,12 @@ export default function TripDetail() {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [membersModalOpen, setMembersModalOpen] = useState(false);
   const [editForm] = Form.useForm();
+  const currentUser = useUserStore((s) => s.user);
+  const isOwner = !!trip?.members?.some(
+    (m) => m.role === "owner" && m.userId === currentUser?.id
+  );
 
   const loadTrip = useCallback(async () => {
     if (!tripId) return;
@@ -288,7 +299,15 @@ export default function TripDetail() {
 
         {/* 成员展示 */}
         {trip.members && trip.members.length > 0 && (
-          <div style={{ marginTop: 12 }}>
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <Avatar.Group maxCount={8} size="default">
               {trip.members.map((m) => (
                 <Tooltip
@@ -311,6 +330,15 @@ export default function TripDetail() {
                 </Tooltip>
               ))}
             </Avatar.Group>
+            {isOwner && (
+              <Button
+                size="small"
+                icon={<TeamOutlined />}
+                onClick={() => setMembersModalOpen(true)}
+              >
+                管理成员
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -408,6 +436,14 @@ export default function TripDetail() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 成员管理 Modal（1.5） */}
+      <MembersModal
+        trip={trip}
+        open={membersModalOpen}
+        onClose={() => setMembersModalOpen(false)}
+        onUpdated={loadTrip}
+      />
     </div>
   );
 }
@@ -536,6 +572,8 @@ function ScheduleTab({
   const [conflictLatest, setConflictLatest] = useState<ScheduleItem | null>(
     null
   );
+  const [uploading, setUploading] = useState(false);
+  const imageUrlValue = Form.useWatch("imageUrl", form);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -575,6 +613,22 @@ function ScheduleTab({
       lng: p.lng,
     });
     setMapPickerOpen(false);
+  };
+
+  // 图片上传：调用后端 /api/upload，成功后回填 imageUrl 字段
+  const handleUploadImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const { url } = await uploadApi.image(file);
+      form.setFieldsValue({ imageUrl: url });
+      message.success("图片已上传");
+    } catch (e: any) {
+      message.error(e?.response?.data?.error || "上传失败，请稍后重试");
+    } finally {
+      setUploading(false);
+    }
+    // 返回 false 阻止 antd 默认上传行为（已由 uploadApi 手动处理）
+    return false;
   };
 
   const openAddModal = (scheduleId: string) => {
@@ -809,8 +863,55 @@ function ScheduleTab({
             <Input placeholder="详细地址（选填）" />
           </Form.Item>
 
-          <Form.Item name="imageUrl" label="图片链接">
-            <Input placeholder="粘贴图片 URL（选填）" />
+          <Form.Item label="项目图片">
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginBottom: 8,
+              }}
+            >
+              <Upload
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  handleUploadImage(file);
+                  return false;
+                }}
+              >
+                <Button icon={<UploadOutlined />} loading={uploading}>
+                  本地上传
+                </Button>
+              </Upload>
+              {imageUrlValue && (
+                <>
+                  <img
+                    src={imageUrlValue}
+                    alt="预览"
+                    style={{
+                      width: 56,
+                      height: 56,
+                      objectFit: "cover",
+                      borderRadius: 6,
+                      border: "1px solid #f0f0f0",
+                    }}
+                  />
+                  <Button
+                    size="small"
+                    type="link"
+                    danger
+                    onClick={() => form.setFieldsValue({ imageUrl: undefined })}
+                  >
+                    移除
+                  </Button>
+                </>
+              )}
+            </div>
+            <Form.Item name="imageUrl" noStyle>
+              <Input placeholder="或直接粘贴图片 URL（选填）" />
+            </Form.Item>
           </Form.Item>
 
           <Form.Item name="transportToNext" label="到下一站交通">
@@ -1018,17 +1119,40 @@ function TransportTab({
 
   const handleSave = async () => {
     const values = await form.validateFields();
+    // 6.10 兜底：仅手填地名未选 POI 时，提交前尝试地理编码（全国范围，起讫地常不在目的地城市）
+    let { depLat, depLng, arrLat, arrLng } = values;
+    let geoFilled = false;
+    if (depLat == null && depLng == null && values.departurePlace) {
+      const g = await geocodePlace(values.departurePlace);
+      if (g) {
+        depLat = g.lat;
+        depLng = g.lng;
+        geoFilled = true;
+      }
+    }
+    if (arrLat == null && arrLng == null && values.arrivalPlace) {
+      const g = await geocodePlace(values.arrivalPlace);
+      if (g) {
+        arrLat = g.lat;
+        arrLng = g.lng;
+        geoFilled = true;
+      }
+    }
     const data = {
       ...values,
+      depLat,
+      depLng,
+      arrLat,
+      arrLng,
       departureTime: values.departureTime?.toISOString(),
       arrivalTime: values.arrivalTime?.toISOString(),
     };
     if (editingItem) {
       await transportApi.update(trip.id, editingItem.id, data);
-      message.success("已更新");
+      message.success(geoFilled ? "已更新（地点坐标已自动补齐）" : "已更新");
     } else {
       await transportApi.create(trip.id, data);
-      message.success("已添加");
+      message.success(geoFilled ? "已添加（地点坐标已自动补齐）" : "已添加");
     }
     setModalOpen(false);
     onUpdate();
@@ -1176,17 +1300,66 @@ function TransportTab({
             <Form.Item
               name="departurePlace"
               label="出发地"
-              style={{ flex: 1, minWidth: 140 }}
+              style={{ flex: 1, minWidth: 160 }}
+              extra={
+                <LocationPicker
+                  placeholder="搜索出发地，自动带出坐标"
+                  onPick={(loc) =>
+                    form.setFieldsValue({
+                      departurePlace: loc.name,
+                      depLat: loc.lat,
+                      depLng: loc.lng,
+                    })
+                  }
+                />
+              }
             >
-              <Input placeholder="例如：北京首都机场" />
+              <Input
+                placeholder="例如：北京首都机场"
+                onChange={() =>
+                  form.setFieldsValue({ depLat: undefined, depLng: undefined })
+                }
+              />
             </Form.Item>
             <Form.Item
               name="arrivalPlace"
               label="到达地"
-              style={{ flex: 1, minWidth: 140 }}
+              style={{ flex: 1, minWidth: 160 }}
+              extra={
+                <LocationPicker
+                  placeholder="搜索到达地，自动带出坐标"
+                  onPick={(loc) =>
+                    form.setFieldsValue({
+                      arrivalPlace: loc.name,
+                      arrLat: loc.lat,
+                      arrLng: loc.lng,
+                    })
+                  }
+                />
+              }
             >
-              <Input placeholder="例如：大阪关西机场" />
+              <Input
+                placeholder="例如：大阪关西机场"
+                onChange={() =>
+                  form.setFieldsValue({ arrLat: undefined, arrLng: undefined })
+                }
+              />
             </Form.Item>
+          </div>
+          <Form.Item name="depLat" hidden>
+            <Input />
+          </Form.Item>
+          <Form.Item name="depLng" hidden>
+            <Input />
+          </Form.Item>
+          <Form.Item name="arrLat" hidden>
+            <Input />
+          </Form.Item>
+          <Form.Item name="arrLng" hidden>
+            <Input />
+          </Form.Item>
+          <div style={{ fontSize: 12, color: "#9ca3af", marginTop: -12, marginBottom: 12 }}>
+            搜索选中地点后即可在地图画出跨城连线；仅手填地名时，保存会自动尝试地理编码。
           </div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Form.Item
@@ -1689,7 +1862,10 @@ function SummaryTab({ trip }: { trip: Trip }) {
         {allLocations.length > 0 && (
           <>
             <Divider style={{ margin: "16px 0" }}>🗺️ 地图路线</Divider>
-            <MapView locations={allLocations} />
+            <MapView
+              locations={allLocations}
+              intercity={toIntercitySegments(trip.transportations)}
+            />
           </>
         )}
 
@@ -1817,27 +1993,41 @@ function SummaryTab({ trip }: { trip: Trip }) {
 function MapTab({ trip }: { trip: Trip }) {
   const [filterDay, setFilterDay] = useState<number | "all">("all");
   const [showLines, setShowLines] = useState(true);
+  const [showIntercity, setShowIntercity] = useState(true);
 
-  // 按天收集坐标；住宿按 checkInDate 匹配当天，作为该天末站（用于「住宿→次日首景点」串联）
+  // 城际交通段（6.10）：坐标齐全的段画跨城蓝线；按单天筛选时不显示（城际段不属于某一天）
+  const intercity = useMemo(
+    () => toIntercitySegments(trip.transportations),
+    [trip.transportations]
+  );
+
+  // 按天收集坐标；住宿保留 dayIndex 供按天筛选展示，但不参与连线（MapView 内 hotel 不进连线分组）
+  // 日程项按 sortOrder（同序再按 startTime）排序，保证连线顺序与实际行程顺序一致
   // useMemo 稳定 allLocations 引用：仅行程/住宿数据变化时重建，避免父组件普通重渲染触发 MapView 反复重建 + 动画重播
   const allLocations = useMemo<MapLocation[]>(() => {
     const dayMap = new Map<number, MapLocation[]>();
     const dayDateMap = new Map<number, string>();
     trip.schedules?.forEach((s) => {
       dayDateMap.set(s.dayIndex, s.date);
-      s.items?.forEach((item) => {
-        if (item.lat && item.lng) {
-          const arr = dayMap.get(s.dayIndex) || [];
-          arr.push({
-            lat: item.lat,
-            lng: item.lng,
-            title: item.title,
-            dayIndex: s.dayIndex,
-            type: item.type,
-          });
-          dayMap.set(s.dayIndex, arr);
-        }
-      });
+      [...(s.items || [])]
+        .sort(
+          (x, y) =>
+            (x.sortOrder ?? 0) - (y.sortOrder ?? 0) ||
+            String(x.startTime || "").localeCompare(String(y.startTime || ""))
+        )
+        .forEach((item) => {
+          if (item.lat && item.lng) {
+            const arr = dayMap.get(s.dayIndex) || [];
+            arr.push({
+              lat: item.lat,
+              lng: item.lng,
+              title: item.title,
+              dayIndex: s.dayIndex,
+              type: item.type,
+            });
+            dayMap.set(s.dayIndex, arr);
+          }
+        });
     });
     trip.accommodations?.forEach((a) => {
       if (!(a.lat && a.lng)) return;
@@ -1901,11 +2091,31 @@ function MapTab({ trip }: { trip: Trip }) {
           />
           显示路线连线
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={showIntercity}
+            onChange={(e) => setShowIntercity(e.target.checked)}
+          />
+          显示城际连线
+        </label>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginLeft: "auto" }}>
+          {intercity.length > 0 && (
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+              <span style={{ width: 16, height: 0, borderTop: "3px solid #2f54eb" }} />
+              城际移动
+            </span>
+          )}
           <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
             <span style={{ width: 16, height: 0, borderTop: "2px dashed #8c8c8c" }} />
             跨天移动
           </span>
+          {trip.accommodations?.some((a) => a.lat && a.lng) && (
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+              <span style={{ fontSize: 13, lineHeight: "16px" }}>{"\u{1F3E8}"}</span>
+              住宿（只标点）
+            </span>
+          )}
           {dayOptions.map((d) => (
             <span
               key={d}
@@ -1924,7 +2134,12 @@ function MapTab({ trip }: { trip: Trip }) {
           ))}
         </div>
       </div>
-      <MapView locations={filtered} showPolylines={showLines} />
+      <MapView
+        locations={filtered}
+        showPolylines={showLines}
+        intercity={filterDay === "all" ? intercity : []}
+        showIntercity={showIntercity}
+      />
     </div>
   );
 }

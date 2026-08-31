@@ -41,11 +41,6 @@ export function getTMap(): any {
   return (window as any).TMap;
 }
 
-// #RRGGBB -> 十进制整数（腾讯 PolylineStyle.color 需要 number 类型）
-export function hexToRgbNum(hex: string): number {
-  return parseInt(hex.replace("#", ""), 16);
-}
-
 // ---------- 路线规划结果缓存（减少 WebService 配额消耗） ----------
 // 地理路径长期不变，缓存到内存 + localStorage（30 天 TTL，裁剪至 800 条），
 // 确保相同起终点不重复调用路线规划接口，避免触碰免费配额上限。
@@ -179,4 +174,28 @@ export async function getCachedRoadPath(
   }
   // 瞬时错误：仅内存缓存，下次刷新重试，不写 localStorage
   return [a, b];
+}
+
+// 地名 → 坐标（best-effort 地理编码，复用地点搜索服务）。
+// 用于交通表单仅手填地名未选 POI 时的提交兜底；失败返回 null，调用方降级。
+export async function geocodePlace(
+  keyword: string,
+  city?: string
+): Promise<{ lat: number; lng: number } | null> {
+  const kw = keyword.trim();
+  if (!kw) return null;
+  try {
+    const TMap = await loadTencentMap();
+    if (!TMap?.service?.Search) return null;
+    const svc = new TMap.service.Search({ key: TENCENT_MAP_KEY });
+    const boundary = city ? `region(${city},0)` : 'region("全国",0)';
+    const res = await svc.search({ keyword: kw, boundary, page_size: 1 });
+    const first = res?.data?.[0];
+    if (first?.location?.lat && first?.location?.lng) {
+      return { lat: first.location.lat, lng: first.location.lng };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

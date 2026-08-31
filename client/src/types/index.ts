@@ -102,6 +102,10 @@ export interface Transportation {
   bookingInfo?: string;
   notes?: string;
   cost?: number;
+  depLat?: number;
+  depLng?: number;
+  arrLat?: number;
+  arrLng?: number;
 }
 
 export interface Accommodation {

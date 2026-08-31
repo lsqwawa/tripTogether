@@ -1,6 +1,7 @@
 import client from "./client";
 import type {
   Trip,
+  TripMember,
   Transportation,
   Accommodation,
   DailySchedule,
@@ -61,6 +62,14 @@ export const tripApi = {
   getMembers: (tripId: string) =>
     client.get(`/trips/${tripId}/members`).then((r) => r.data),
 
+  updateMemberRole: (tripId: string, memberId: string, role: string) =>
+    client
+      .patch<TripMember>(`/trips/${tripId}/members/${memberId}`, { role })
+      .then((r) => r.data),
+
+  removeMember: (tripId: string, memberId: string) =>
+    client.delete(`/trips/${tripId}/members/${memberId}`).then((r) => r.data),
+
   getByShareCode: (inviteCode: string) =>
     client.get<Trip>(`/trips/share/${inviteCode}`).then((r) => r.data),
 };
@@ -98,6 +107,16 @@ export const transportLookupApi = {
         data: any;
       }>("/transport-lookup", { params: { type, code } })
       .then((r) => r.data),
+};
+
+// ==================== 图片上传 =================
+
+export const uploadApi = {
+  image: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post<{ url: string }>("/upload", fd).then((r) => r.data);
+  },
 };
 
 // ==================== Accommodation ====================
