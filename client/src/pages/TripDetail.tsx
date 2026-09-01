@@ -35,9 +35,10 @@ import {
   HolderOutlined,
   TeamOutlined,
   UploadOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { tripApi, scheduleApi, transportApi, accommodationApi, transportLookupApi, uploadApi, weatherApi } from "../api";
+import { tripApi, scheduleApi, transportApi, accommodationApi, transportLookupApi, uploadApi, weatherApi, transportMatchApi } from "../api";
 import type {
   Trip,
   ScheduleItem,
@@ -86,6 +87,21 @@ import { CSS } from "@dnd-kit/utilities";
 const { TextArea } = Input;
 const { RangePicker } = DatePicker;
 
+const LEG_MODE_OPTIONS: { value: string; label: string }[] = [
+  { value: "walking", label: "🚶 步行" },
+  { value: "driving", label: "🚗 驾车" },
+  { value: "transit", label: "🚌 公交/地铁" },
+  { value: "intercity", label: "🚄 城际" },
+  { value: "none", label: "➖ 不接驳" },
+];
+const LEG_MODE_ICON: Record<string, string> = {
+  walking: "🚶",
+  driving: "🚗",
+  transit: "🚌",
+  intercity: "🚄",
+  none: "➖",
+};
+
 export default function TripDetail() {
   const { tripId } = useParams();
   const navigate = useNavigate();
@@ -120,7 +136,20 @@ export default function TripDetail() {
   const [weatherByDate, setWeatherByDate] = useState<Record<string, WeatherDay>>(
     {}
   );
-  const tripIdForWeather = trip?.id;
+  // 天气依赖坐标指纹而非 tripId：住宿 / 日程项补充了坐标后应重新拉取天气，
+  // 否则会一直沿用 destination 地理编码结果而永不刷新
+  const weatherCoordKey = (() => {
+    if (!trip) return "";
+    const acc = trip.accommodations?.find((a) => a.lat && a.lng);
+    if (acc) return `acc:${acc.id}:${acc.lat}:${acc.lng}`;
+    const item = trip.schedules
+      ?.flatMap((s) => s.items || [])
+      .find((i) => i.lat && i.lng);
+    if (item) return `item:${item.id}:${item.lat}:${item.lng}`;
+    if (trip.destination) return `dest:${trip.destination}`;
+    return "";
+  })();
+  const weatherDateKey = `${trip?.startDate ?? ""}|${trip?.endDate ?? ""}`;
   useEffect(() => {
     if (!trip) return;
     let cancelled = false;
@@ -169,8 +198,8 @@ export default function TripDetail() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripIdForWeather]);
+    // 依赖坐标指纹 + 日期区间；补坐标或改行程区间时重新拉取天气
+  }, [weatherCoordKey, weatherDateKey]);
 
   if (loading) {
     return (
@@ -373,7 +402,7 @@ export default function TripDetail() {
               flexWrap: "wrap",
             }}
           >
-            <Avatar.Group maxCount={8} size="default">
+            <Avatar.Group max={{ count: 8 }} size="default">
               {trip.members.map((m) => (
                 <Tooltip
                   key={m.id}
@@ -560,12 +589,16 @@ function SortableScheduleItem({
   onDelete,
   onToggle,
   readOnly,
+  tripId,
+  onLegUpdated,
 }: {
   item: ScheduleItem;
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
   readOnly: boolean;
+  tripId: string;
+  onLegUpdated: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id, disabled: readOnly });
@@ -576,8 +609,43 @@ function SortableScheduleItem({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const { message } = AntApp.useApp();
+  const [legModalOpen, setLegModalOpen] = useState(false);
+  const [legForm] = Form.useForm();
+
+  const openLegEdit = () => {
+    legForm.setFieldsValue({
+      legMode: item.legMode || "driving",
+      legSummary: item.legSummary || "",
+      legDistanceM: item.legDistanceM ?? undefined,
+      legDurationMin: item.legDurationMin ?? undefined,
+    });
+    setLegModalOpen(true);
+  };
+
+  const handleLegSave = async () => {
+    const values = await legForm.validateFields();
+    try {
+      await transportMatchApi.updateLeg(tripId, item.id, {
+        legMode: values.legMode,
+        legSummary: values.legSummary || undefined,
+        legDistanceM: values.legDistanceM ?? undefined,
+        legDurationMin: values.legDurationMin ?? undefined,
+      });
+      message.success("接驳方式已更新");
+      setLegModalOpen(false);
+      onLegUpdated();
+    } catch (e: any) {
+      // 400 等已在后端拦截，仅提示其它业务错误
+      if (e?.response?.status !== 400) {
+        message.error(e?.response?.data?.error || "保存失败");
+      }
+    }
+  };
+
   return (
-    <div ref={setNodeRef} style={style} className="schedule-item">
+    <>
+      <div ref={setNodeRef} style={style} className="schedule-item">
       {!readOnly && (
         <span
           {...attributes}
@@ -642,6 +710,39 @@ function SortableScheduleItem({
             {item.description}
           </div>
         )}
+        {item.legMode && (
+          <div
+            onClick={() => !readOnly && openLegEdit()}
+            style={{
+              marginTop: 6,
+              padding: "6px 8px",
+              background: "#f5f7ff",
+              border: "1px solid #e6ebff",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "#475569",
+              cursor: readOnly ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>{LEG_MODE_ICON[item.legMode] || "🚗"}</span>
+            <span>{item.legSummary || "接驳段"}</span>
+            {item.legAutoMatched === false ? (
+              <Tag style={{ marginLeft: "auto", fontSize: 10 }} color="gold">
+                人工
+              </Tag>
+            ) : (
+              !readOnly && (
+                <Tag style={{ marginLeft: "auto", fontSize: 10 }} color="blue">
+                  自动
+                </Tag>
+              )
+            )}
+          </div>
+        )}
       </div>
       {!readOnly && (
         <div className="schedule-item-actions">
@@ -666,6 +767,37 @@ function SortableScheduleItem({
         </div>
       )}
     </div>
+
+    <Modal
+      title="编辑接驳方式"
+      open={legModalOpen}
+      onOk={handleLegSave}
+      onCancel={() => setLegModalOpen(false)}
+      okText="保存"
+      cancelText="取消"
+    >
+      <Form form={legForm} layout="vertical">
+        <Form.Item name="legMode" label="接驳方式" rules={[{ required: true }]}>
+          <Select>
+            {LEG_MODE_OPTIONS.map((o) => (
+              <Select.Option key={o.value} value={o.value}>
+                {o.label}
+              </Select.Option>
+            ))}
+          </Select>
+        </Form.Item>
+        <Form.Item name="legSummary" label="展示文案">
+          <Input placeholder="如：驾车约 12 分钟 · 3.2 km" />
+        </Form.Item>
+        <Form.Item name="legDistanceM" label="距离（米）">
+          <InputNumber min={0} style={{ width: "100%" }} />
+        </Form.Item>
+        <Form.Item name="legDurationMin" label="时长（分钟）">
+          <InputNumber min={0} style={{ width: "100%" }} />
+        </Form.Item>
+      </Form>
+    </Modal>
+    </>
   );
 }
 
@@ -694,6 +826,7 @@ function ScheduleTab({
   );
   const [uploading, setUploading] = useState(false);
   const imageUrlValue = Form.useWatch("imageUrl", form);
+  const [matching, setMatching] = useState(false);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
@@ -848,8 +981,51 @@ function ScheduleTab({
     }
   };
 
+  const handleMatchTransport = async () => {
+    setMatching(true);
+    try {
+      const res = await transportMatchApi.match(trip.id);
+      const parts = [`已匹配 ${res.legsApplied} 段接驳`];
+      if (res.skippedNoCoord > 0)
+        parts.push(`跳过 ${res.skippedNoCoord} 段（缺坐标）`);
+      if (res.intercityDrafts?.length)
+        parts.push(`生成 ${res.intercityDrafts.length} 条城际草稿待确认`);
+      message.success(parts.join("，"));
+      onUpdate();
+    } catch (e: any) {
+      message.error(e?.response?.data?.error || "匹配失败，请稍后重试");
+    } finally {
+      setMatching(false);
+    }
+  };
+
   return (
     <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 12,
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <span style={{ color: "#6b7280", fontSize: 13 }}>
+          🚗 系统可基于日程项坐标，自动推算相邻景点的接驳方式与城际交通草稿
+        </span>
+        {!readOnly && (
+          <Button
+            type="primary"
+            size="small"
+            icon={<ThunderboltOutlined />}
+            loading={matching}
+            onClick={handleMatchTransport}
+          >
+            一键匹配接驳
+          </Button>
+        )}
+      </div>
       {trip.schedules?.map((schedule) => {
         const items = localItems[schedule.id] || schedule.items || [];
         return (
@@ -901,6 +1077,8 @@ function ScheduleTab({
                       onDelete={() => handleDelete(item)}
                       onToggle={() => toggleStatus(item)}
                       readOnly={readOnly}
+                      tripId={trip.id}
+                      onLegUpdated={onUpdate}
                     />
                   ))}
                 </SortableContext>
@@ -1153,6 +1331,10 @@ function TransportTab({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Transportation | null>(null);
   const [form] = Form.useForm();
+  const [confirmingItem, setConfirmingItem] = useState<Transportation | null>(
+    null
+  );
+  const [confirmForm] = Form.useForm();
 
   // 班次查询（航班/火车）状态
   const [lookup, setLookup] = useState<{
@@ -1297,6 +1479,41 @@ function TransportTab({
     onUpdate();
   };
 
+  // 确认采纳系统生成的城际草稿：可一并修正方式/时间/费用等
+  const openConfirm = (item: Transportation) => {
+    setConfirmingItem(item);
+    confirmForm.setFieldsValue({
+      ...item,
+      status: item.status || "confirmed",
+      departureTime: item.departureTime ? dayjs(item.departureTime) : undefined,
+      arrivalTime: item.arrivalTime ? dayjs(item.arrivalTime) : undefined,
+    });
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmingItem) return;
+    const values = await confirmForm.validateFields();
+    try {
+      await transportMatchApi.confirm(trip.id, confirmingItem.id, {
+        status: values.status,
+        transportType: values.transportType,
+        bookingInfo: values.bookingInfo || undefined,
+        notes: values.notes || undefined,
+        cost: values.cost ?? undefined,
+        departureTime: values.departureTime?.toISOString(),
+        arrivalTime: values.arrivalTime?.toISOString(),
+      });
+      message.success("已确认采纳城际交通");
+      setConfirmingItem(null);
+      onUpdate();
+    } catch (e: any) {
+      // 400 等已在后端拦截，仅提示其它业务错误
+      if (e?.response?.status !== 400) {
+        message.error(e?.response?.data?.error || "确认失败");
+      }
+    }
+  };
+
   const renderSection = (
     type: "departure" | "return" | "intercity",
     label: string,
@@ -1345,6 +1562,15 @@ function TransportTab({
                 readOnly
                   ? undefined
                   : [
+                      ...(type === "intercity" && item.matched
+                        ? [
+                            <Tooltip key="confirm" title="确认采纳草稿">
+                              <CheckCircleOutlined
+                                onClick={() => openConfirm(item)}
+                              />
+                            </Tooltip>,
+                          ]
+                        : []),
                       <Popconfirm
                         key="delete"
                         title="确认删除？"
@@ -1390,9 +1616,13 @@ function TransportTab({
                     </div>
                   )}
                 </div>
-                <Tag color={STATUS_COLORS[item.status]}>
-                  {STATUS_LABELS[item.status]}
-                </Tag>
+                {item.matched ? (
+                  <Tag color="gold">待确认草稿</Tag>
+                ) : (
+                  <Tag color={STATUS_COLORS[item.status]}>
+                    {STATUS_LABELS[item.status]}
+                  </Tag>
+                )}
               </div>
             </Card>
           ))
@@ -1624,6 +1854,63 @@ function TransportTab({
             </div>
           )}
 
+          <Form.Item name="notes" label="备注">
+            <TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 确认采纳城际草稿 */}
+      <Modal
+        title="确认采纳城际交通"
+        open={!!confirmingItem}
+        onOk={handleConfirm}
+        onCancel={() => setConfirmingItem(null)}
+        okText="确认采纳"
+        cancelText="取消"
+      >
+        <Form form={confirmForm} layout="vertical">
+          <Form.Item name="transportType" label="交通方式" rules={[{ required: true }]}>
+            <Select>
+              {Object.entries(TRANSPORT_LABELS).map(([k, v]) => (
+                <Select.Option key={k} value={k}>
+                  {TRANSPORT_ICONS[k]} {v}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="bookingInfo" label="预订信息">
+            <Input placeholder="航班号/车次号/订单号" />
+          </Form.Item>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Form.Item
+              name="departureTime"
+              label="出发时间"
+              style={{ flex: 1, minWidth: 140 }}
+            >
+              <DatePicker showTime format="YYYY-MM-DD HH:mm" style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item
+              name="arrivalTime"
+              label="到达时间"
+              style={{ flex: 1, minWidth: 140 }}
+            >
+              <DatePicker showTime format="YYYY-MM-DD HH:mm" style={{ width: "100%" }} />
+            </Form.Item>
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Form.Item name="cost" label="花费 (¥)" style={{ flex: 1, minWidth: 140 }}>
+              <InputNumber min={0} style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item name="status" label="状态" style={{ flex: 1, minWidth: 140 }}>
+              <Select>
+                <Select.Option value="pending">待规划</Select.Option>
+                <Select.Option value="booked">已预订</Select.Option>
+                <Select.Option value="confirmed">已确认</Select.Option>
+                <Select.Option value="completed">已完成</Select.Option>
+              </Select>
+            </Form.Item>
+          </div>
           <Form.Item name="notes" label="备注">
             <TextArea rows={2} />
           </Form.Item>

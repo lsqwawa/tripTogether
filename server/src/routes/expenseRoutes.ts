@@ -10,6 +10,29 @@ const router = Router({ mergeParams: true });
 // 该路由组下所有操作都要求当前用户是计划成员；写操作在各端点追加 editor 校验
 router.use(requireTripMember);
 
+/** 取本行程所有成员 userId，用于校验 payerId / participantIds 是否越权 */
+async function getTripMemberUserIds(tripId: string): Promise<Set<string>> {
+  const list = await AppDataSource.getRepository(TripMember).find({
+    where: { tripId },
+  });
+  return new Set(list.map((m) => m.userId));
+}
+
+/** 解析 participantIds，非法 JSON 一律视为空数组；仅保留真实成员，返回有效参与者 */
+function parseParticipants(
+  raw: unknown,
+  memberSet: Set<string>
+): { ok: boolean; participants: string[] } {
+  let arr: unknown;
+  try {
+    arr = JSON.parse(typeof raw === "string" ? raw : "[]");
+  } catch {
+    return { ok: false, participants: [] };
+  }
+  if (!Array.isArray(arr)) return { ok: false, participants: [] };
+  return { ok: true, participants: arr.filter((x) => memberSet.has(String(x))) };
+}
+
 // ==================== 花费记录 ====================
 
 router.get(
@@ -39,6 +62,15 @@ router.post(
     const numAmount = Number(amount);
     if (!Number.isFinite(numAmount)) {
       return res.status(400).json({ error: "金额必须为数字" });
+    }
+
+    // 防越权：付款人与参与人必须都是本行程成员（避免写入任意 UUID）
+    const memberSet = await getTripMemberUserIds(req.params.tripId);
+    if (!memberSet.has(payerId)) {
+      return res.status(400).json({ error: "付款人不是本行程成员" });
+    }
+    if (!participantIds.every((id: string) => memberSet.has(id))) {
+      return res.status(400).json({ error: "参与分摊成员包含非本行程成员" });
     }
 
     const repo = AppDataSource.getRepository(Expense);
@@ -78,10 +110,20 @@ router.patch(
       }
       item.amount = numAmount;
     }
-    if (payerId !== undefined) item.payerId = payerId;
+    if (payerId !== undefined) {
+      const memberSet = await getTripMemberUserIds(req.params.tripId);
+      if (!memberSet.has(payerId)) {
+        return res.status(400).json({ error: "付款人不是本行程成员" });
+      }
+      item.payerId = payerId;
+    }
     if (participantIds !== undefined) {
       if (!Array.isArray(participantIds) || participantIds.length === 0) {
         return res.status(400).json({ error: "至少选择一位参与分摊的成员" });
+      }
+      const memberSet = await getTripMemberUserIds(req.params.tripId);
+      if (!participantIds.every((id: string) => memberSet.has(id))) {
+        return res.status(400).json({ error: "参与分摊成员包含非本行程成员" });
       }
       item.participantIds = JSON.stringify(participantIds);
     }
@@ -121,7 +163,7 @@ router.get(
       }),
     ]);
 
-    const totalAmount = expenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+    const memberSet = new Set(members.map((m) => m.userId));
     const memberCount = members.length || 1;
 
     const stats: Record<
@@ -142,21 +184,20 @@ router.get(
       }
     }
 
+    // 只有「参与人非空且均为本行程成员」的花费才计入总额与分摊，
+    // 否则整笔剔除（不进 total，也不造假数据），保证分子分母一致。
+    let totalAmount = 0;
     for (const e of expenses) {
-      let participants: string[] = [];
-      try {
-        participants = JSON.parse(e.participantIds || "[]");
-      } catch {
-        participants = [];
-      }
-      if (participants.length === 0) continue;
+      const { ok, participants } = parseParticipants(e.participantIds, memberSet);
+      if (!ok || participants.length === 0) continue;
+      if (!memberSet.has(e.payerId)) continue;
 
-      if (stats[e.payerId]) stats[e.payerId].paid += e.amount;
-
+      stats[e.payerId].paid += e.amount;
       const share = e.amount / participants.length;
       for (const pid of participants) {
         if (stats[pid]) stats[pid].owed += share;
       }
+      totalAmount += e.amount;
     }
 
     for (const uid in stats) {

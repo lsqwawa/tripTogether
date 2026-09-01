@@ -756,7 +756,7 @@ export default function Guide() {
             description={
               <ul style={{ paddingLeft: 20, margin: 0 }}>
                 <li>无实时协作：多人同时编辑需要手动刷新页面才能看到对方改动</li>
-                <li>无导出功能：行程总览只能在页面上查看，暂不支持导出 PDF</li>
+                <li>暂不支持导出 PDF：但「行程总览」与分享页均提供「导出长图」按钮，可一键生成 PNG 分享图</li>
               </ul>
             }
           />

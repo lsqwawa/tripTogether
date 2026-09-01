@@ -55,7 +55,6 @@ export interface IntercitySuggestion {
 export interface MatchPair {
   a: SequenceItem;
   b: SequenceItem;
-  crossDay: boolean;
 }
 
 export interface MatchOutput {
@@ -280,7 +279,7 @@ export function buildMatchPairs(sorted: SequenceItem[]): MatchPair[] {
   for (let i = 0; i < sorted.length - 1; i++) {
     const a = sorted[i];
     const b = sorted[i + 1];
-    pairs.push({ a, b, crossDay: a.dayIndex !== b.dayIndex });
+    pairs.push({ a, b });
   }
   return pairs;
 }

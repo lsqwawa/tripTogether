@@ -36,6 +36,19 @@ const CONFIRM_FIELDS = [
   "arrivalTime",
 ] as const;
 
+// legMode 允许的取值；其余视为非法入参
+const LEG_MODES = ["walking", "driving", "transit", "intercity", "none"] as const;
+
+/** 非负有限数字（meter / minute / cost 等度量字段统一校验） */
+function isNonNegativeNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0;
+}
+
+/** 合法时间字符串（ISO 8601 或可被 Date.parse 解析） */
+function isParseableDateTime(v: unknown): v is string {
+  return typeof v === "string" && v.length > 0 && !Number.isNaN(Date.parse(v));
+}
+
 /** 按 dayIndex + sortOrder 拉平日程项，并记录每项所属天序号 */
 async function loadSortedItems(
   tripId: string
@@ -183,6 +196,21 @@ router.patch(
     if (!item) return res.status(404).json({ error: "日程项不存在" });
 
     const body = req.body as Record<string, unknown>;
+
+    // 入参校验：枚举 / 数值范围 / 类型
+    if (body.legMode !== undefined && !LEG_MODES.includes(body.legMode as any)) {
+      return res.status(400).json({ error: "legMode 取值非法" });
+    }
+    if (body.legDistanceM !== undefined && !isNonNegativeNumber(body.legDistanceM)) {
+      return res.status(400).json({ error: "legDistanceM 必须为非负数字" });
+    }
+    if (body.legDurationMin !== undefined && !isNonNegativeNumber(body.legDurationMin)) {
+      return res.status(400).json({ error: "legDurationMin 必须为非负数字" });
+    }
+    if (body.legSummary !== undefined && typeof body.legSummary !== "string") {
+      return res.status(400).json({ error: "legSummary 必须为字符串" });
+    }
+
     let changed = false;
     for (const k of LEG_PATCH_FIELDS) {
       if (body[k] !== undefined) {
@@ -210,7 +238,27 @@ router.patch(
     });
     if (!item) return res.status(404).json({ error: "交通记录不存在" });
 
+    // 仅允许对待确认草稿（matched=true）执行确认；已确认记录不应重复确认
+    if (item.matched !== true) {
+      return res.status(400).json({ error: "该交通记录不是待确认草稿" });
+    }
+
     const body = req.body as Record<string, unknown>;
+
+    // 入参校验：cost 数值范围、时间字段合法性、status 类型
+    if (body.cost !== undefined && !isNonNegativeNumber(body.cost)) {
+      return res.status(400).json({ error: "cost 必须为非负数字" });
+    }
+    if (body.departureTime !== undefined && !isParseableDateTime(body.departureTime)) {
+      return res.status(400).json({ error: "departureTime 必须为合法时间" });
+    }
+    if (body.arrivalTime !== undefined && !isParseableDateTime(body.arrivalTime)) {
+      return res.status(400).json({ error: "arrivalTime 必须为合法时间" });
+    }
+    if (body.status !== undefined && typeof body.status !== "string") {
+      return res.status(400).json({ error: "status 必须为字符串" });
+    }
+
     for (const k of CONFIRM_FIELDS) {
       if (body[k] !== undefined) {
         (item as any)[k] = body[k];

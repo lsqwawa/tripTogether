@@ -20,6 +20,7 @@ import {
   TRIP_STATUS_LABELS,
 } from "../types";
 import MapView, { toIntercitySegments } from "../components/MapView";
+import ExportTripImage from "../components/ExportTripImage";
 
 export default function ShareTrip() {
   const { inviteCode } = useParams();
@@ -112,6 +113,7 @@ export default function ShareTrip() {
           返回首页
         </Button>
         <div style={{ display: "flex", gap: 8 }}>
+          <ExportTripImage trip={trip} />
           <Button
             type="primary"
             icon={<LoginOutlined />}

@@ -55,9 +55,15 @@ DB_PASSWORD=你的密码
 DB_NAME=trip_together
 DB_SYNCHRONIZE=true   # 开发期 true（启动自动建/改表），生产建议 false
 PORT=3001
+
+# 腾讯地图 WebService Key（服务端用：地理编码 + 路线规划匹配引擎；需在控制台开通 WebService API）
+TENCENT_MAP_KEY=
+# 腾讯地图 JS API GL Key（前端用：地图渲染与路线规划；配置在 client/.env 的 VITE_TENCENT_MAP_KEY，未配置时前端回退内置默认 Key）
+VITE_TENCENT_MAP_KEY=
 ```
 
 > `.env` 含密钥，已被 `.gitignore` 忽略，不要提交。换机器部署时复制 `server/.env.example` 为 `server/.env` 并填入对应环境的真实值即可。
+> 前端 Key：复制 `client/.env.example` 为 `client/.env` 并填入 `VITE_TENCENT_MAP_KEY`（可选，缺省回退内置值）。
 > `server/src/database.ts` 通过 `dotenv` 读取上述变量，未设置时回退到默认值（localhost/postgres 等）。
 
 ### 1.1 一键初始化数据库（推荐）
@@ -188,7 +194,7 @@ TripTogether/
 ## 📌 已知限制 / 后续规划
 
 - 认证为 MVP 简化方案（昵称 + 密码 + 本地会话），后续计划接入 JWT / 微信扫码
-- 实时协作（多人同时编辑）、评论、导出 PDF、预算对比尚未实现
+- 实时协作（多人同时编辑）、评论、导出 PDF、预算对比尚未实现（已支持导出 PNG 长图分享）
 - 生产部署建议：数据库配置改环境变量、接入对象存储做图片上传、地图瓦片在国内建议替换为腾讯地图
 
 详见 `项目功能说明文档.md` 与 `docs/产品分析与实施计划.html`。

@@ -1,7 +1,15 @@
 // 腾讯地图 JS API GL 动态加载与全局类型声明
 // 坐标系：腾讯地图使用 GCJ-02，与腾讯地理编码 / 地点搜索返回的坐标一致，无需转换。
 
-export const TENCENT_MAP_KEY = "5ULBZ-A4OET-RTQXK-VVT3R-4BNJO-KPF5Q";
+// 腾讯地图 JS API GL Key（浏览器侧公开 Key，需在腾讯位置服务控制台配置「授权域名白名单」）
+// 优先读取 Vite 注入的环境变量 VITE_TENCENT_MAP_KEY；未配置时回退到内置默认值，
+// 保证本地 / 未配置环境仍可直跑。注意：该 Key 与「服务端 WebService Key（TENCENT_MAP_KEY 环境变量）」
+// 是两类不同产品——前者用于前端地图渲染与路线规划，后者用于服务端地理编码 / 路线规划匹配，
+// 二者不可混用，需分别在腾讯位置服务控制台开通对应能力。
+const FALLBACK_TENCENT_MAP_KEY = "5ULBZ-A4OET-RTQXK-VVT3R-4BNJO-KPF5Q";
+export const TENCENT_MAP_KEY: string =
+  (import.meta.env.VITE_TENCENT_MAP_KEY as string | undefined) ||
+  FALLBACK_TENCENT_MAP_KEY;
 
 declare global {
   interface Window {

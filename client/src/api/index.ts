@@ -61,9 +61,6 @@ export const tripApi = {
       inviteCode,
     }).then((r) => r.data),
 
-  getMembers: (tripId: string) =>
-    client.get(`/trips/${tripId}/members`).then((r) => r.data),
-
   updateMemberRole: (tripId: string, memberId: string, role: string) =>
     client
       .patch<TripMember>(`/trips/${tripId}/members/${memberId}`, { role })
@@ -146,11 +143,6 @@ export const accommodationApi = {
 // ==================== Schedule ====================
 
 export const scheduleApi = {
-  list: (tripId: string) =>
-    client.get<DailySchedule[]>(`/trips/${tripId}/schedules`).then(
-      (r) => r.data
-    ),
-
   update: (tripId: string, scheduleId: string, data: Partial<DailySchedule>) =>
     client
       .patch<DailySchedule>(`/trips/${tripId}/schedules/${scheduleId}`, data)

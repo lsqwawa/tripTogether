@@ -554,8 +554,8 @@ export default function MapView({ locations, showPolylines = true, intercity = [
       });
       // 浅色/简约底图样式（预设 style3=白浅）
       try {
-        if (typeof map.setMapStyle === "function") map.setMapStyle("style3");
-        else if (typeof map.setMapStyleId === "function") map.setMapStyleId("style3");
+        // if (typeof map.setMapStyle === "function") map.setMapStyle("style3");
+        // else if (typeof map.setMapStyleId === "function") map.setMapStyleId("style3");
       } catch (e) {
         /* 样式不可用则保持默认底图 */
       }

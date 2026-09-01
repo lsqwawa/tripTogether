@@ -50,8 +50,9 @@ export const requireTripEditor = asyncHandler(async (req, res, next) => {
   if (!member) {
     return res.status(403).json({ error: "你不是该计划的成员，无权访问" });
   }
-  if (member.role === "viewer") {
-    return res.status(403).json({ error: "查看者仅可浏览行程，无权修改内容" });
+  // 白名单式：仅 owner / editor 可写；未来新增角色（如 guest）默认无写权限
+  if (member.role !== "owner" && member.role !== "editor") {
+    return res.status(403).json({ error: "仅计划创建者或编辑者可修改行程" });
   }
   next();
 });
