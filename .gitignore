@@ -13,6 +13,8 @@ build/
 client/src/**/*.js
 client/src/**/*.js.map
 client/src/**/*.d.ts
+# 例外：vite-env.d.ts 是 Vite 官方类型声明入口（提供 import.meta.env 类型），必须入库
+!client/src/vite-env.d.ts
 vite.config.ts.timestamp-*.mjs
 
 # ===== 环境变量 / 密钥（切勿提交） =====
