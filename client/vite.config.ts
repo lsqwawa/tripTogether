@@ -1,7 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+// base：生产构建走子路径 /trip/（部署在共享服务器 8080 端口的 /trip/ 前缀下）；
+// 本地 dev（mode=development）保持根路径，开发习惯不变。
+export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/trip/" : "/",
   plugins: [react()],
   server: {
     port: 5175,
@@ -21,4 +24,4 @@ export default defineConfig({
     // 改为构建前用 rm -rf 手动清空（见 npm run build 前置命令）。
     emptyOutDir: false,
   },
-});
+}));

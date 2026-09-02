@@ -227,7 +227,8 @@ export default function TripDetail() {
   };
 
   const copyShareLink = () => {
-    const link = `${window.location.origin}/share/${trip.inviteCode}`;
+    // 分享页挂在子路径前缀下（如 /trip/share/xxx），须拼 BASE_URL
+    const link = `${window.location.origin}${import.meta.env.BASE_URL}share/${trip.inviteCode}`;
     navigator.clipboard.writeText(link);
     message.success("分享链接已复制！发给朋友即可查看行程");
   };
