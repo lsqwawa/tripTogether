@@ -298,6 +298,12 @@ export const transportMatchApi = {
       .patch<ScheduleItem>(`/trips/${tripId}/schedule-items/${itemId}/transport`, data)
       .then((r) => r.data),
 
+  // 删除某段接驳（匹配错了可清除重来）
+  clearLeg: (tripId: string, itemId: string) =>
+    client
+      .delete<ScheduleItem>(`/trips/${tripId}/schedule-items/${itemId}/transport`)
+      .then((r) => r.data),
+
   confirm: (tripId: string, id: string, data?: Partial<Transportation>) =>
     client
       .patch<Transportation>(`/trips/${tripId}/transportations/${id}/confirm`, data || {})

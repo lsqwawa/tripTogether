@@ -8,6 +8,7 @@ export interface MapLocation {
   title: string;
   dayIndex?: number;
   type?: string;
+  date?: string; // 所属日期（YYYY-MM-DD），用于标点标签显示「日期-序号」
 }
 
 // 城际交通段（6.10）：两端坐标齐全时才绘制跨城连线
@@ -83,7 +84,38 @@ function escapeXml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function pinDataUri(color: string, label: string): string {
+// 将 YYYY-MM-DD 转为 M.DD（如 2026-09-26 → 9.26），用于「日期-序号」地图标签
+function formatMd(date?: string): string | null {
+  if (!date) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
+  if (!m) return null;
+  return `${parseInt(m[2], 10)}.${m[3]}`;
+}
+
+// 日期序号标签（含 "-" 如 9.26 - 1）用圆角徽章以容纳较长文字；
+// 短标签（emoji 或 1.1）沿用经典水滴 pin。返回 {uri,width,height} 供 MarkerStyle 使用。
+function makePin(
+  color: string,
+  label: string
+): { uri: string; width: number; height: number } {
+  const useBadge = label.includes("-");
+  if (useBadge) {
+    const fs = label.length >= 9 ? 7 : 8;
+    const w = Math.max(34, Math.round(label.length * fs * 0.62 + 12));
+    const h = fs + 14;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+      `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="${(h - 2) / 2}" fill="${color}" stroke="#ffffff" stroke-width="2"/>` +
+      `<text x="${w / 2}" y="${(h - 2) / 2 + fs * 0.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="#ffffff" font-family="-apple-system,sans-serif">` +
+      escapeXml(label) +
+      "</text>" +
+      "</svg>";
+    return {
+      uri: "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg),
+      width: w,
+      height: h,
+    };
+  }
   const fs = label.length >= 4 ? 9 : 11;
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="34" viewBox="0 0 28 34">' +
@@ -94,7 +126,108 @@ function pinDataUri(color: string, label: string): string {
     escapeXml(label) +
     "</text>" +
     "</svg>";
-  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  return {
+    uri: "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg),
+    width: 28,
+    height: 34,
+  };
+}
+
+// 聚合簇内各点的元信息（用于统计「哪个日期的点最多」）
+interface ClusterMeta {
+  md: string | null; // M.DD 形式的日期，如 9.26
+  dayIndex: number;
+}
+
+/**
+ * 取聚合簇内点数最多的日期；日期数相同时以较小的 dayIndex（更早的天）为准，保证结果稳定。
+ * 无日期可统计（如簇内全是住宿点）时返回 null，由调用方降级为住宿样式。
+ */
+function pickDominantDate(
+  metas: ClusterMeta[]
+): { md: string; dayIndex: number; count: number } | null {
+  const tally = new Map<string, { count: number; dayIndex: number }>();
+  for (const m of metas) {
+    if (!m.md) continue;
+    const cur = tally.get(m.md);
+    if (cur) cur.count += 1;
+    else tally.set(m.md, { count: 1, dayIndex: m.dayIndex });
+  }
+  let best: { md: string; dayIndex: number; count: number } | null = null;
+  tally.forEach((v, k) => {
+    if (
+      !best ||
+      v.count > best.count ||
+      (v.count === best.count && v.dayIndex < best.dayIndex)
+    ) {
+      best = { md: k, dayIndex: v.dayIndex, count: v.count };
+    }
+  });
+  return best;
+}
+
+// 自定义聚合气泡：继承 TMap.DOMOverlay，可渲染任意 HTML（默认样式只能显示数量）
+function createClusterBubbleClass(TMap: any): any {
+  function ClusterBubble(this: any, options: any) {
+    TMap.DOMOverlay.call(this, options);
+  }
+  ClusterBubble.prototype = new TMap.DOMOverlay();
+
+  ClusterBubble.prototype.onInit = function (options: any) {
+    this.html = options.html;
+    this.size = options.size;
+    this.color = options.color;
+    this.position = options.position;
+  };
+
+  ClusterBubble.prototype.onClick = function () {
+    this.emit("click");
+  };
+
+  ClusterBubble.prototype.createDOM = function () {
+    const dom = document.createElement("div");
+    dom.style.cssText = [
+      "position:absolute",
+      "top:0",
+      "left:0",
+      `width:${this.size}px`,
+      `height:${this.size}px`,
+      "border-radius:50%",
+      `background:${this.color}`,
+      "color:#fff",
+      "border:2px solid #fff",
+      "box-sizing:border-box",
+      "display:flex",
+      "flex-direction:column",
+      "align-items:center",
+      "justify-content:center",
+      "font-family:-apple-system,sans-serif",
+      "cursor:pointer",
+      "user-select:none",
+      "box-shadow:0 1px 4px rgba(0,0,0,.25)",
+    ].join(";");
+    dom.innerHTML = this.html;
+    this.boundClick = this.onClick.bind(this);
+    dom.addEventListener("click", this.boundClick);
+    return dom;
+  };
+
+  ClusterBubble.prototype.updateDOM = function () {
+    if (!this.map || !this.dom) return;
+    const pixel = this.map.projectToContainer(this.position);
+    const left = pixel.getX() - this.dom.clientWidth / 2;
+    const top = pixel.getY() - this.dom.clientHeight / 2;
+    this.dom.style.transform = `translate(${left}px, ${top}px)`;
+  };
+
+  ClusterBubble.prototype.onDestroy = function () {
+    if (this.dom && this.boundClick) {
+      this.dom.removeEventListener("click", this.boundClick);
+    }
+    this.removeAllListeners();
+  };
+
+  return ClusterBubble;
 }
 
 // 飞行段的二次贝塞尔弧线路径：中点沿垂直方向抬升，贴近航线图视觉
@@ -166,6 +299,8 @@ interface Props {
   showPolylines?: boolean;
   intercity?: IntercitySegment[];
   showIntercity?: boolean;
+  // 点位重叠时按「日期」聚合：簇内显示点数最多的那个日期
+  cluster?: boolean;
 }
 
 // 路线生长动画：渐进 reveal 每个 polyline 的顶点
@@ -211,12 +346,14 @@ async function renderLocations(
   showPolylines: boolean,
   intercity: IntercitySegment[],
   showIntercity: boolean,
-  layersRef: MutableRefObject<any>
+  layersRef: MutableRefObject<any>,
+  enableCluster: boolean
 ) {
   const token = (layersRef.current.token || 0) + 1;
   layersRef.current.token = token;
 
-  const icSegs = intercity || [];
+  // 城际交通是否展示由 showIntercity 控制（含站点标记与跨城连线），保证开关一致
+  const icSegs = showIntercity ? intercity || [] : [];
 
   // 清理函数：清掉旧图层（在新图层构建完成前一刻才执行，避免中间态空图）
   const clearLayers = () => {
@@ -226,6 +363,12 @@ async function renderLocations(
     if (old.chevrons) old.chevrons.setMap(null);
     if (old.infoWindow) old.infoWindow.setMap(null);
     if (old.animTimer) clearInterval(old.animTimer);
+    // 聚合相关：解绑聚合实例、销毁自定义气泡，避免缩放/拖拽时图层堆积
+    if (old.cluster) old.cluster.setMap(null);
+    if (old.bubbles) {
+      old.bubbles.forEach((b: any) => b.destroy?.());
+      old.bubbles.length = 0; // 清空，防止后续回调重复 destroy
+    }
     return old;
   };
 
@@ -242,14 +385,23 @@ async function renderLocations(
 
   // MultiMarker 三件套：几何点、样式表、id→信息映射（点击时按 geometry.id 查）
   const geometries: any[] = [];
+  // 住宿点几何（最底层）
+  const hotelGeoms: any[] = [];
+  // 日程点几何暂存：循环结束后最后压入，保证日程点位于最上层
+  const dayGeoms: any[] = [];
+  // gid → 日期元信息，供聚合时统计「簇内哪个日期的点最多」
+  const metaByGid: Record<string, ClusterMeta> = {};
+  // 聚合仅在点位 ≥2 且 SDK 支持时启用（1 个点无从聚合）
+  const useCluster = enableCluster && typeof TMap.MarkerCluster === "function" && locations.length > 1;
   const markerStyles: Record<string, any> = {};
   const infoById: Record<string, any> = {};
   const ensureStyle = (styleId: string, color: string, label: string) => {
     if (!markerStyles[styleId]) {
+      const pin = makePin(color, label);
       markerStyles[styleId] = new TMap.MarkerStyle({
-        src: pinDataUri(color, label),
-        width: 28,
-        height: 34,
+        src: pin.uri,
+        width: pin.width,
+        height: pin.height,
       });
     }
   };
@@ -259,6 +411,7 @@ async function renderLocations(
 
   locations.forEach((loc, idx) => {
     const day = loc.dayIndex || 0;
+    const md = loc.type === "hotel" ? null : formatMd(loc.date);
     let styleId: string;
     let color: string;
     let label: string;
@@ -271,7 +424,7 @@ async function renderLocations(
       const seq = (daySeq[day] = (daySeq[day] || 0) + 1);
       styleId = `day${(day - 1) % DAY_COLORS.length}_${seq}`;
       color = DAY_COLORS[(day - 1) % DAY_COLORS.length];
-      label = `${day}.${seq}`;
+      label = md ? `${md} - ${seq}` : `${day}.${seq}`;
     } else {
       styleId = "gray";
       color = "#8c8c8c";
@@ -280,19 +433,30 @@ async function renderLocations(
 
     ensureStyle(styleId, color, label);
     const gid = `loc_${idx}`;
-    geometries.push({
+    const geom = {
       id: gid,
       styleId,
       position: new TMap.LatLng(loc.lat, loc.lng),
-    });
+    };
     infoById[gid] = { lat: loc.lat, lng: loc.lng, title: loc.title, day, type: loc.type };
+    metaByGid[gid] = { md, dayIndex: day };
     bounds.extend(new TMap.LatLng(loc.lat, loc.lng));
 
     if (day > 0 && loc.type !== "hotel") {
       if (!dayMap[day]) dayMap[day] = [];
       dayMap[day].push(loc);
     }
+
+    // 住宿点归入底层数组；日程点归入顶层数组，两者都等城际点压入后再统一挂载
+    if (loc.type === "hotel") {
+      hotelGeoms.push(geom);
+    } else {
+      dayGeoms.push(geom);
+    }
   });
+
+  // 住宿点放最底层（聚合模式下改由 cluster_changed 统一挂载）
+  if (!useCluster) hotelGeoms.forEach((g) => geometries.push(g));
 
   // 城际交通起讫点标记（车站/机场图标），点击展示班次概要
   icSegs.forEach((seg, si) => {
@@ -332,18 +496,115 @@ async function renderLocations(
     });
   });
 
+  // 日程点最后压入 → 最上层，不被住宿点 / 城际站点遮挡
+  if (!useCluster) dayGeoms.forEach((g) => geometries.push(g));
+
   // 标点一次性挂载后，才清旧图层，避免「先清后画」造成空图闪烁
   const old = clearLayers();
-  let markers: any = null;
-  if (geometries.length > 0) {
-    markers = new TMap.MultiMarker({ map, geometries, styles: markerStyles });
-    markers.on("click", (evt: any) => {
-      const gid = evt?.geometry?.id;
-      const info = gid != null ? infoById[gid] : undefined;
-      if (info) openInfo(TMap, map, layersRef, info);
+
+  if (useCluster) {
+    // ---------- 按日期聚合：重叠时合成气泡，显示「簇内点数最多的日期」 ----------
+    const ClusterBubble = createClusterBubbleClass(TMap);
+    const baseGeoms = geometries.slice(); // 城际站点，不参与聚合
+    const bubbles: any[] = []; // 稳定引用，clearLayers 与回调共享
+
+    const cluster = new TMap.MarkerCluster({
+      id: "loc-cluster",
+      map,
+      enableDefaultStyle: false, // 关闭内置样式，改为自己画「日期 + 数量」气泡
+      minimumClusterSize: 2,
+      gridSize: 60,
+      averageCenter: false,
+      geometries: [...hotelGeoms, ...dayGeoms].map((g) => ({
+        id: g.id,
+        position: g.position,
+      })),
     });
+
+    const renderClusters = () => {
+      if (token !== layersRef.current.token) return;
+      bubbles.forEach((b) => b.destroy?.());
+      bubbles.length = 0;
+
+      const singleIds = new Set<string>();
+      const clusters = cluster.getClusters();
+      (clusters || []).forEach((item: any) => {
+        const members = item.geometries || [];
+        if (members.length <= 1) {
+          members.forEach((g: any) => g.id && singleIds.add(g.id));
+          return;
+        }
+        const n = members.length;
+        const metas = members
+          .map((g: any) => metaByGid[g.id])
+          .filter(Boolean) as ClusterMeta[];
+        const dominant = pickDominantDate(metas);
+        const color = dominant
+          ? DAY_COLORS[(Math.max(1, dominant.dayIndex) - 1) % DAY_COLORS.length]
+          : "#722ed1"; // 簇内无日期（全是住宿点）→ 住宿紫
+        const head = dominant ? dominant.md : "\u{1F3E8}";
+        const size = Math.min(60, 38 + Math.min(n, 8) * 2);
+        const html =
+          `<div style="font-size:11px;line-height:1.15;opacity:.95">${head}</div>` +
+          `<div style="font-size:13px;font-weight:700;line-height:1">${n}</div>`;
+        const bubble = new ClusterBubble({
+          map,
+          position: item.center,
+          html,
+          size,
+          color,
+        });
+        // 自定义样式下 zoomOnClick 失效，点击需自己展开该簇
+        bubble.on("click", () => {
+          if (item.bounds) map.fitBounds(item.bounds, { padding: 60 });
+        });
+        bubbles.push(bubble);
+      });
+
+      // 散点按「城际 → 住宿 → 日程」挂载，日程点仍在最上层
+      const markerGeoms = [
+        ...baseGeoms,
+        ...hotelGeoms.filter((g) => singleIds.has(g.id)),
+        ...dayGeoms.filter((g) => singleIds.has(g.id)),
+      ];
+      if (layersRef.current.markers) {
+        layersRef.current.markers.setGeometries(markerGeoms);
+      } else {
+        const mk = new TMap.MultiMarker({
+          map,
+          geometries: markerGeoms,
+          styles: markerStyles,
+        });
+        mk.on("click", (evt: any) => {
+          const gid = evt?.geometry?.id;
+          const info = gid != null ? infoById[gid] : undefined;
+          if (info) openInfo(TMap, map, layersRef, info);
+        });
+        if (layersRef.current.token === token) layersRef.current.markers = mk;
+      }
+    };
+
+    cluster.on("cluster_changed", renderClusters);
+    layersRef.current = {
+      cluster,
+      bubbles,
+      markers: null,
+      infoWindow: old.infoWindow,
+      token,
+    };
+    renderClusters(); // 首帧：聚合异步完成前先画散点
+  } else {
+    let markers: any = null;
+    if (geometries.length > 0) {
+      markers = new TMap.MultiMarker({ map, geometries, styles: markerStyles });
+      markers.on("click", (evt: any) => {
+        const gid = evt?.geometry?.id;
+        const info = gid != null ? infoById[gid] : undefined;
+        if (info) openInfo(TMap, map, layersRef, info);
+      });
+    }
+    layersRef.current = { markers, infoWindow: old.infoWindow, token };
   }
-  layersRef.current = { markers, infoWindow: old.infoWindow, token };
   if (locations.length + icSegs.length * 2 > 1) map.fitBounds(bounds, { padding: 80 });
 
   if (!showPolylines) return;
@@ -508,7 +769,13 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export default function MapView({ locations, showPolylines = true, intercity = [], showIntercity = true }: Props) {
+export default function MapView({
+  locations,
+  showPolylines = true,
+  intercity = [],
+  showIntercity = true,
+  cluster = false, // 默认不聚合，由调用方按需开启
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const layersRef = useRef<any>({});
@@ -579,16 +846,23 @@ export default function MapView({ locations, showPolylines = true, intercity = [
     const map = mapRef.current;
     const TMap = getTMap();
     if (!map || !TMap || !hasData) return;
-    renderLocations(TMap, map, locations, showPolylines, intercity, showIntercity, layersRef).catch((e) =>
-      console.error("[MapView] \u6E32\u67D3\u5931\u8D25:", e)
-    );
+    renderLocations(
+      TMap,
+      map,
+      locations,
+      showPolylines,
+      intercity,
+      showIntercity,
+      layersRef,
+      cluster
+    ).catch((e) => console.error("[MapView] \u6E32\u67D3\u5931\u8D25:", e));
     return () => {
       if (layersRef.current.animTimer) {
         clearInterval(layersRef.current.animTimer);
         layersRef.current.animTimer = null;
       }
     };
-  }, [locKey, icKey, showPolylines, showIntercity, ready, hasData]);
+  }, [locKey, icKey, showPolylines, showIntercity, cluster, ready, hasData]);
 
   if (error) {
     return (

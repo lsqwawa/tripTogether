@@ -643,6 +643,19 @@ function SortableScheduleItem({
     }
   };
 
+  // 删除接驳：匹配错了可清除重来
+  const handleLegDelete = async () => {
+    try {
+      await transportMatchApi.clearLeg(tripId, item.id);
+      message.success("已删除该接驳");
+      onLegUpdated();
+    } catch (e: any) {
+      if (e?.response?.status !== 400) {
+        message.error(e?.response?.data?.error || "删除失败");
+      }
+    }
+  };
+
   return (
     <>
       <div ref={setNodeRef} style={style} className="schedule-item">
@@ -712,7 +725,17 @@ function SortableScheduleItem({
         )}
         {item.legMode && (
           <div
-            onClick={() => !readOnly && openLegEdit()}
+            onClick={(e) => {
+              if (readOnly) return;
+              const el = e.target as HTMLElement | null;
+              if (!el) return;
+              // Popconfirm 弹层走 Portal 挂到 body，DOM 上不是卡片子节点，
+              // 但 React 合成事件仍沿组件树冒泡上来 → 用 contains 过滤掉
+              if (!e.currentTarget.contains(el)) return;
+              // 删除按钮所在区域不触发编辑
+              if (el.closest("[data-leg-noclick]")) return;
+              openLegEdit();
+            }}
             style={{
               marginTop: 6,
               padding: "6px 8px",
@@ -740,6 +763,19 @@ function SortableScheduleItem({
                   自动
                 </Tag>
               )
+            )}
+            {!readOnly && (
+              <Popconfirm title="删除该接驳？" onConfirm={handleLegDelete}>
+                <span data-leg-noclick style={{ display: "inline-flex" }}>
+                  <Button
+                    size="small"
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    style={{ marginLeft: 4 }}
+                  />
+                </span>
+              </Popconfirm>
             )}
           </div>
         )}
@@ -2196,7 +2232,11 @@ function SummaryTab({ trip }: { trip: Trip }) {
     title: string;
     dayIndex?: number;
     type: string;
+    date?: string;
   }> = [];
+
+  const dayDateMap = new Map<number, string>();
+  trip.schedules?.forEach((s) => dayDateMap.set(s.dayIndex, s.date));
 
   trip.accommodations?.forEach((a) => {
     if (a.lat && a.lng) {
@@ -2213,6 +2253,7 @@ function SummaryTab({ trip }: { trip: Trip }) {
           title: item.title,
           dayIndex: s.dayIndex,
           type: item.type,
+          date: s.date,
         });
       }
     });
@@ -2292,13 +2333,14 @@ function SummaryTab({ trip }: { trip: Trip }) {
           </div>
         )}
 
-        {/* 地图路线总览 */}
+        {/* 地图路线总览：总览只画日程/住宿点与当天路线，不展示城际交通信息 */}
         {allLocations.length > 0 && (
           <>
             <Divider style={{ margin: "16px 0" }}>🗺️ 地图路线</Divider>
             <MapView
               locations={allLocations}
-              intercity={toIntercitySegments(trip.transportations)}
+              intercity={[]}
+              showIntercity={false}
             />
           </>
         )}
@@ -2428,6 +2470,9 @@ function MapTab({ trip }: { trip: Trip }) {
   const [filterDay, setFilterDay] = useState<number | "all">("all");
   const [showLines, setShowLines] = useState(true);
   const [showIntercity, setShowIntercity] = useState(true);
+  const [showHotels, setShowHotels] = useState(true);
+  const [showSchedule, setShowSchedule] = useState(true);
+  const [clusterByDate, setClusterByDate] = useState(false);
 
   // 城际交通段（6.10）：坐标齐全的段画跨城蓝线；按单天筛选时不显示（城际段不属于某一天）
   const intercity = useMemo(
@@ -2458,6 +2503,7 @@ function MapTab({ trip }: { trip: Trip }) {
               title: item.title,
               dayIndex: s.dayIndex,
               type: item.type,
+              date: dayDateMap.get(s.dayIndex),
             });
             dayMap.set(s.dayIndex, arr);
           }
@@ -2486,13 +2532,16 @@ function MapTab({ trip }: { trip: Trip }) {
   }, [trip.schedules, trip.accommodations]);
 
   const dayOptions = trip.schedules?.map((s) => s.dayIndex) || [];
-  const filtered = useMemo<MapLocation[]>(
-    () =>
+  // 按天 + 类型开关过滤：关闭「日程」只留住宿点，关闭「住宿」隐藏住宿点
+  const filtered = useMemo<MapLocation[]>(() => {
+    let list =
       filterDay === "all"
         ? allLocations
-        : allLocations.filter((l) => (l.dayIndex || 0) === filterDay),
-    [allLocations, filterDay]
-  );
+        : allLocations.filter((l) => (l.dayIndex || 0) === filterDay);
+    if (!showSchedule) list = list.filter((l) => l.type === "hotel");
+    if (!showHotels) list = list.filter((l) => l.type !== "hotel");
+    return list;
+  }, [allLocations, filterDay, showSchedule, showHotels]);
 
   return (
     <div>
@@ -2531,7 +2580,31 @@ function MapTab({ trip }: { trip: Trip }) {
             checked={showIntercity}
             onChange={(e) => setShowIntercity(e.target.checked)}
           />
-          显示城际连线
+          显示交通信息
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={showHotels}
+            onChange={(e) => setShowHotels(e.target.checked)}
+          />
+          显示住宿点
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={showSchedule}
+            onChange={(e) => setShowSchedule(e.target.checked)}
+          />
+          显示日程
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={clusterByDate}
+            onChange={(e) => setClusterByDate(e.target.checked)}
+          />
+          按日期聚合
         </label>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginLeft: "auto" }}>
           {intercity.length > 0 && (
@@ -2572,7 +2645,8 @@ function MapTab({ trip }: { trip: Trip }) {
         locations={filtered}
         showPolylines={showLines}
         intercity={filterDay === "all" ? intercity : []}
-        showIntercity={showIntercity}
+        showIntercity={showIntercity && showSchedule}
+        cluster={clusterByDate}
       />
     </div>
   );

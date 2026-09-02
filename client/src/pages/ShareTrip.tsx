@@ -70,7 +70,11 @@ export default function ShareTrip() {
     title: string;
     dayIndex?: number;
     type: string;
+    date?: string;
   }> = [];
+
+  const dayDateMap = new Map<number, string>();
+  trip.schedules?.forEach((s) => dayDateMap.set(s.dayIndex, s.date));
 
   trip.accommodations?.forEach((a) => {
     if (a.lat && a.lng) {
@@ -87,6 +91,7 @@ export default function ShareTrip() {
           title: item.title,
           dayIndex: s.dayIndex,
           type: item.type,
+          date: s.date,
         });
       }
     });

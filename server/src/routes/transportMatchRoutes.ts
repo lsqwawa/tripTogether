@@ -227,6 +227,40 @@ router.patch(
   })
 );
 
+// 删除某段接驳（匹配错了可清除重来）：清空接驳字段并标记为人工维护，
+// 重跑一键匹配时不会被自动覆盖。PATCH 的 undefined 跳过逻辑无法清字段，故独立端点。
+const LEG_CLEAR_FIELDS = [
+  "legMode",
+  "legDistanceM",
+  "legDurationMin",
+  "legPolyline",
+  "legSummary",
+] as const;
+
+router.delete(
+  "/schedule-items/:itemId/transport",
+  requireTripEditor,
+  asyncHandler(async (req: Request, res: Response) => {
+    const repo = AppDataSource.getRepository(ScheduleItem);
+    const item = await repo.findOne({
+      where: { id: req.params.itemId, tripId: req.params.tripId },
+    });
+    if (!item) return res.status(404).json({ error: "日程项不存在" });
+
+    // 没有任何接驳可删时直接提示，避免误清空人工维护标记
+    if (!item.legMode && !item.legSummary && item.legAutoMatched !== false) {
+      return res.status(400).json({ error: "该日程项没有可删除的接驳" });
+    }
+
+    for (const k of LEG_CLEAR_FIELDS) {
+      (item as any)[k] = null;
+    }
+    item.legAutoMatched = false;
+    await repo.save(item);
+    res.json(item);
+  })
+);
+
 // 确认城际草稿：置 matched=false，可同时修正方式/时间等
 router.patch(
   "/transportations/:id/confirm",
