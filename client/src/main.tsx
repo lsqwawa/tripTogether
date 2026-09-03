@@ -6,6 +6,8 @@ import zhCN from "antd/locale/zh_CN";
 import "dayjs/locale/zh-cn";
 import App from "./App";
 import "./styles/global.css";
+// antd-mobile 移动端组件样式（日期/日历选择器底部弹起）
+import "antd-mobile/bundle/style.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

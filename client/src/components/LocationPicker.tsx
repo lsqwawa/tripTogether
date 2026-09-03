@@ -25,6 +25,8 @@ export default function LocationPicker({ city, placeholder, onPick }: Props) {
   const [options, setOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  // 是否已发起过搜索且无结果；用于在非 loading 时也提示「未找到」，避免静默无反馈
+  const [noResult, setNoResult] = useState(false);
   const memCache = useRef<Map<string, any[]>>(new Map());
   const debounceRef = useRef<any>(null);
 
@@ -95,6 +97,7 @@ export default function LocationPicker({ city, placeholder, onPick }: Props) {
     const cached = getCached(cacheKey);
     if (cached) {
       setOptions(cached.map(toOption));
+      setNoResult(cached.length === 0);
       return;
     }
     setLoading(true);
@@ -113,6 +116,7 @@ export default function LocationPicker({ city, placeholder, onPick }: Props) {
       }));
       setOptions(cacheData.map(toOption));
       setCached(cacheKey, cacheData);
+      setNoResult(cacheData.length === 0);
     } catch (e) {
       setOptions([]);
     } finally {
@@ -122,6 +126,8 @@ export default function LocationPicker({ city, placeholder, onPick }: Props) {
 
   // 输入防抖：停顿 300ms 后才真正发起搜索，削减连续输入产生的无效请求
   const onSearch = (value: string) => {
+    // 新输入先清掉旧「未找到」状态，避免下拉闪烁上一轮的提示
+    setNoResult(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(value), 300);
   };
@@ -143,7 +149,7 @@ export default function LocationPicker({ city, placeholder, onPick }: Props) {
         }
       }}
       placeholder={placeholder || "搜索地点，自动填充坐标"}
-      notFoundContent={loading ? <Spin size="small" /> : null}
+      notFoundContent={loading ? <Spin size="small" /> : noResult ? "未找到匹配地点" : null}
       filterOption={false}
     />
   );

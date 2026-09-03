@@ -111,7 +111,7 @@ export default function Login() {
           }}
         >
           {mode === "register"
-            ? "注册后昵称不可更改，请确认后提交"
+            ? ""
             : "还没账号？点击上方「注册」创建新账号"}
         </Typography.Paragraph>
       </div>

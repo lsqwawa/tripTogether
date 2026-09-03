@@ -162,7 +162,7 @@ export default function ShareTrip() {
         {/* 成员 */}
         {trip.members && trip.members.length > 0 && (
           <div style={{ textAlign: "center", marginBottom: 16 }}>
-            <Avatar.Group maxCount={8}>
+            <Avatar.Group max={{ count: 8 }}>
               {trip.members.map((m) => (
                 <Tooltip
                   key={m.id}

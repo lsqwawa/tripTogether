@@ -4,16 +4,15 @@ import {
   Card,
   Form,
   Input,
-  DatePicker,
   Button,
   message,
   InputNumber,
 } from "antd";
 import dayjs from "dayjs";
 import { tripApi } from "../api";
+import ResponsiveRangePicker from "../components/ResponsiveRangePicker";
 
 const { TextArea } = Input;
-const { RangePicker } = DatePicker;
 
 export default function CreateTrip() {
   const navigate = useNavigate();
@@ -67,7 +66,7 @@ export default function CreateTrip() {
             label="旅行日期"
             rules={[{ required: true, message: "请选择日期范围" }]}
           >
-            <RangePicker
+            <ResponsiveRangePicker
               style={{ width: "100%" }}
               format="YYYY-MM-DD"
               disabledDate={(current) =>

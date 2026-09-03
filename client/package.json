@@ -16,6 +16,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@types/leaflet": "^1.9.22",
     "antd": "^5.20.0",
+    "antd-mobile": "^5.42.3",
     "axios": "^1.7.0",
     "dayjs": "^1.11.12",
     "html2canvas": "^1.4.1",

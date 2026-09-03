@@ -6,7 +6,6 @@ import {
   Input,
   InputNumber,
   Select,
-  DatePicker,
   Empty,
   Tag,
   Avatar,
@@ -24,6 +23,8 @@ import {
 import dayjs from "dayjs";
 import { expenseApi } from "../api";
 import type { Trip, Expense, ExpenseStats } from "../types";
+import ResponsiveDatePicker from "./ResponsiveDatePicker";
+import { getErrorMessage, isValidationError } from "../utils/error";
 import {
   EXPENSE_CATEGORY_LABELS,
   EXPENSE_CATEGORY_ICONS,
@@ -125,10 +126,9 @@ export default function ExpensesTab({ trip, onUpdate, readOnly = false }: Props)
       setModalOpen(false);
       await load();
       onUpdate();
-    } catch (e: any) {
-      if (e?.errorFields) return; // 验证错误
-      const msg = e?.response?.data?.error || "操作失败";
-      message.error(msg);
+    } catch (e) {
+      if (isValidationError(e)) return; // 校验失败由表单自身高亮
+      message.error(getErrorMessage(e, "操作失败"));
     }
   };
 
@@ -138,8 +138,8 @@ export default function ExpensesTab({ trip, onUpdate, readOnly = false }: Props)
       message.success("已删除");
       await load();
       onUpdate();
-    } catch (err: any) {
-      message.error(err?.response?.data?.error || "删除失败");
+    } catch (e) {
+      message.error(getErrorMessage(e, "删除失败"));
     }
   };
 
@@ -270,7 +270,7 @@ export default function ExpensesTab({ trip, onUpdate, readOnly = false }: Props)
                       >
                         分摊给:
                       </span>
-                      <Avatar.Group size="small" maxCount={5}>
+                      <Avatar.Group size="small" max={{ count: 5 }}>
                         {participants.map((pid) => (
                           <Tooltip
                             key={pid}
@@ -391,7 +391,7 @@ export default function ExpensesTab({ trip, onUpdate, readOnly = false }: Props)
             label="日期"
             rules={[{ required: true, message: "请选择日期" }]}
           >
-            <DatePicker
+            <ResponsiveDatePicker
               style={{ width: "100%" }}
               format="YYYY-MM-DD"
             />

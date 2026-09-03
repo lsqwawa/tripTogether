@@ -99,8 +99,8 @@ export default function ProgressBoard({ trip }: Props) {
   ];
 
   return (
-    <div className="progress-board">
-      {/* 整体规划完成度（2.3） */}
+    <div>
+      {/* 整体规划完成度：独占一行 */}
       <div style={{ marginBottom: 16 }}>
         <div
           className="flex-between"
@@ -120,25 +120,28 @@ export default function ProgressBoard({ trip }: Props) {
         />
       </div>
 
-      {sections.map((s) => (
-        <div
-          key={s.title}
-          className={`progress-card ${s.status === "completed" ? "done" : ""}`}
-        >
-          <div className="card-header">
-            <span className="card-icon">{s.icon}</span>
-            <Tag color={STATUS_COLORS[s.status] || "default"}>
-              {STATUS_LABELS[s.status] || s.status}
-            </Tag>
-          </div>
-          <div className="card-title">{s.title}</div>
+      {/* 四个环节卡片：桌面端自适应列数，移动端固定 2 列 */}
+      <div className="progress-board">
+        {sections.map((s) => (
           <div
-            style={{ fontSize: 13, color: "#999", marginTop: 4 }}
+            key={s.title}
+            className={`progress-card ${s.status === "completed" ? "done" : ""}`}
           >
-            {s.detail}
+            <div className="card-header">
+              <span className="card-icon">{s.icon}</span>
+              <Tag color={STATUS_COLORS[s.status] || "default"}>
+                {STATUS_LABELS[s.status] || s.status}
+              </Tag>
+            </div>
+            <div className="card-title">{s.title}</div>
+            <div
+              style={{ fontSize: 13, color: "#999", marginTop: 4 }}
+            >
+              {s.detail}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

@@ -188,7 +188,7 @@ export default function Home() {
                 )}
                 {trip.members && trip.members.length > 0 && (
                   <div className="trip-card-members">
-                    <Avatar.Group maxCount={5} size="small">
+                    <Avatar.Group max={{ count: 5 }} size="small">
                       {trip.members.map((m) => (
                         <Tooltip
                           key={m.id}

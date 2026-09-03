@@ -4,7 +4,7 @@ import { useUserStore } from "./stores/userStore";
 import AppLayout from "./components/AppLayout";
 import Home from "./pages/Home";
 import CreateTrip from "./pages/CreateTrip";
-import TripDetail from "./pages/TripDetail";
+import TripDetail from "./features/trip-detail";
 import JoinTrip from "./pages/JoinTrip";
 import Guide from "./pages/Guide";
 import Login from "./pages/Login";

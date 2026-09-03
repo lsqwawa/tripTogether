@@ -113,7 +113,8 @@ function isTransientError(e: any): boolean {
   return true;
 }
 
-// 实际调用路线规划，对瞬时错误做指数退避重试（最多 2 次）
+// 实际调用路线规划，对瞬时错误做指数退避重试（最多 2 次）。
+// 走 JS API GL 服务类库（libraries=service）：驾车 TMap.service.Driving / 步行 TMap.service.Walking。
 async function fetchRouteWithRetry(
   TMap: any,
   a: { lat: number; lng: number },
@@ -121,18 +122,24 @@ async function fetchRouteWithRetry(
   mode: "WALKING" | "DRIVING",
   maxRetry = 2
 ): Promise<{ value: { lat: number; lng: number }[] | null; transient: boolean }> {
+  const Service = mode === "DRIVING" ? TMap.service?.Driving : TMap.service?.Walking;
+  if (!Service) return { value: null, transient: false }; // 服务类不存在，直接兜底
+  const from = new TMap.LatLng(a.lat, a.lng);
+  const to = new TMap.LatLng(b.lat, b.lng);
   for (let attempt = 0; attempt <= maxRetry; attempt++) {
     try {
-      const dir = new TMap.service.Direction({ key: TENCENT_MAP_KEY });
-      const res = await dir.getRoute({
-        from: `${a.lat},${a.lng}`,
-        to: `${b.lat},${b.lng}`,
-        mode,
-      });
-      const routes = res?.routes || res?.result?.routes || [];
-      const polyline = routes[0]?.polyline;
+      const svc = new Service();
+      const res = await svc.search({ from, to });
+      const polyline = res?.result?.routes?.[0]?.polyline || res?.routes?.[0]?.polyline;
       if (Array.isArray(polyline) && polyline.length > 1) {
-        return { value: polyline.map((p: any) => ({ lat: p.lat, lng: p.lng })), transient: false };
+        // polyline 为坐标点数组（TMap.LatLng 或 {lat,lng}），统一转纯对象
+        return {
+          value: polyline.map((p: any) => ({
+            lat: typeof p?.getLat === "function" ? p.getLat() : p?.lat,
+            lng: typeof p?.getLng === "function" ? p.getLng() : p?.lng,
+          })),
+          transient: false,
+        };
       }
       return { value: [a, b], transient: false }; // 成功但无路线 → 直线兜底（确定结果）
     } catch (e) {
@@ -184,25 +191,52 @@ export async function getCachedRoadPath(
   return [a, b];
 }
 
-// 地名 → 坐标（best-effort 地理编码，复用地点搜索服务）。
-// 用于交通表单仅手填地名未选 POI 时的提交兜底；失败返回 null，调用方降级。
-export async function geocodePlace(
-  keyword: string,
-  city?: string
-): Promise<{ lat: number; lng: number } | null> {
-  const kw = keyword.trim();
+// ---------- 地址解析（地址 → 坐标，WebService 地理编码 JSONP） ----------
+// 轻量 JSONP 封装：腾讯 WebService output=jsonp 时用 callback 参数指定回调名。
+function jsonp(url: string, params: Record<string, string>): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const cb = `__ttmap_jsonp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const query = Object.entries(params)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("&");
+    const script = document.createElement("script");
+    script.src = `${url}?${query}&callback=${cb}`;
+
+    const cleanup = () => {
+      delete (window as any)[cb];
+      script.remove();
+    };
+    (window as any)[cb] = (data: any) => {
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("jsonp 请求失败"));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// 地址解析：传入详细地址，返回经纬度与规范化地址；失败/未命中返回 null。
+export async function getLatLngbyAddress(
+  address: string
+): Promise<{ lat: number; lng: number; address: string } | null> {
+  const kw = address.trim();
   if (!kw) return null;
   try {
-    const TMap = await loadTencentMap();
-    if (!TMap?.service?.Search) return null;
-    const svc = new TMap.service.Search({ key: TENCENT_MAP_KEY });
-    const boundary = city ? `region(${city},0)` : 'region("全国",0)';
-    const res = await svc.search({ keyword: kw, boundary, page_size: 1 });
-    const first = res?.data?.[0];
-    if (first?.location?.lat && first?.location?.lng) {
-      return { lat: first.location.lat, lng: first.location.lng };
-    }
-    return null;
+    const res = await jsonp("https://apis.map.qq.com/ws/geocoder/v1/", {
+      output: "jsonp",
+      key: TENCENT_MAP_KEY,
+      address: kw,
+    });
+    const loc = res?.result?.location;
+    if (res?.status !== 0 || !loc?.lat || !loc?.lng) return null;
+    return {
+      lat: loc.lat,
+      lng: loc.lng,
+      address: res.result.title || res.result.address || kw,
+    };
   } catch {
     return null;
   }
