@@ -195,6 +195,9 @@ export interface ScheduleItem {
 
 // ==================== UI 映射常量 ====================
 
+// 视为「已完成」的状态集合（含历史 done 与 completed 双取值，收敛枚举前须一并保留）
+export const DONE_STATUSES: string[] = ["confirmed", "completed", "done"];
+
 export const STATUS_LABELS: Record<string, string> = {
   pending: "待规划",
   booked: "已预订",

@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, Divider, Typography } from "antd";
 import dayjs from "dayjs";
 import type { Trip, ExpenseStats } from "../../../types";
-import {
-  TRANSPORT_LABELS,
-  TRANSPORT_ICONS,
-  ITEM_TYPE_ICONS,
-} from "../../../types";
 import { expenseApi } from "../../../api";
 import MapView from "../../../components/MapView";
+import { collectTripLocations } from "../../trip-overview/collectLocations";
+import {
+  StatsOverview,
+  TransportSummary,
+  ScheduleSummary,
+} from "../../trip-overview/TripOverviewSections";
 
 interface SummaryTabProps {
   trip: Trip;
@@ -37,46 +38,13 @@ export default function SummaryTab({ trip }: SummaryTabProps) {
 
   const expenses = trip.expenses || [];
   const totalExpense = stats?.total ?? 0;
-  const memberCount = trip.members?.length || 1;
   const perCapita = stats?.perCapita ?? 0;
 
-  const totalDays = trip.schedules?.length || 0;
-  const totalItems =
-    trip.schedules?.reduce((acc, s) => acc + (s.items?.length || 0), 0) || 0;
-
   // 收集所有有坐标的地点（useMemo 稳定引用）
-  const allLocations = useMemo(() => {
-    const locs: Array<{
-      lat: number;
-      lng: number;
-      title: string;
-      dayIndex?: number;
-      type: string;
-      date?: string;
-    }> = [];
-
-    trip.accommodations?.forEach((a) => {
-      if (a.lat && a.lng) {
-        locs.push({ lat: a.lat, lng: a.lng, title: a.name, type: "hotel" });
-      }
-    });
-
-    trip.schedules?.forEach((s) => {
-      s.items?.forEach((item) => {
-        if (item.lat && item.lng) {
-          locs.push({
-            lat: item.lat,
-            lng: item.lng,
-            title: item.title,
-            dayIndex: s.dayIndex,
-            type: item.type,
-            date: s.date,
-          });
-        }
-      });
-    });
-    return locs;
-  }, [trip.schedules, trip.accommodations]);
+  const allLocations = useMemo(
+    () => collectTripLocations(trip),
+    [trip.schedules, trip.accommodations]
+  );
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto" }}>
@@ -91,24 +59,7 @@ export default function SummaryTab({ trip }: SummaryTabProps) {
         </div>
 
         {/* 统计概览 */}
-        <div className="summary-stats">
-          <div className="summary-stat">
-            <div className="stat-num">{totalDays}</div>
-            <div className="stat-label">天行程</div>
-          </div>
-          <div className="summary-stat">
-            <div className="stat-num">{totalItems}</div>
-            <div className="stat-label">个安排</div>
-          </div>
-          <div className="summary-stat">
-            <div className="stat-num">{trip.accommodations?.length || 0}</div>
-            <div className="stat-label">处住宿</div>
-          </div>
-          <div className="summary-stat">
-            <div className="stat-num">{memberCount}</div>
-            <div className="stat-label">位成员</div>
-          </div>
-        </div>
+        <StatsOverview trip={trip} />
 
         {/* 预算对比 */}
         {trip.budgetTotal != null && trip.budgetTotal > 0 && (
@@ -192,66 +143,12 @@ export default function SummaryTab({ trip }: SummaryTabProps) {
         {trip.transportations && trip.transportations.length > 0 && (
           <>
             <h3>🚗 交通</h3>
-            {trip.transportations.map((t) => (
-              <div
-                key={t.id}
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  padding: "8px 0",
-                  borderBottom: "1px solid #f5f5f5",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <span>{TRANSPORT_ICONS[t.transportType]}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  {t.type === "departure" ? "出发" : t.type === "return" ? "返程" : "城际"}{" "}
-                  · {TRANSPORT_LABELS[t.transportType]}
-                  {t.departurePlace && ` · ${t.departurePlace}`}
-                  {t.arrivalPlace && ` → ${t.arrivalPlace}`}
-                  {t.departureTime && ` · ${dayjs(t.departureTime).format("MM-DD HH:mm")}`}
-                </span>
-              </div>
-            ))}
+            <TransportSummary trip={trip} />
           </>
         )}
 
         {/* 每日行程 */}
-        {trip.schedules?.map((schedule) => (
-          <div key={schedule.id} style={{ marginBottom: 16 }}>
-            <h3 style={{ marginBottom: 8, fontSize: 15 }}>
-              第{schedule.dayIndex}天 · {dayjs(schedule.date).format("MM月DD日 ddd")}
-            </h3>
-            {schedule.items && schedule.items.length > 0 ? (
-              schedule.items.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    padding: "6px 0",
-                    paddingLeft: 16,
-                    fontSize: 14,
-                    color: "#4b5563",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span>{ITEM_TYPE_ICONS[item.type]}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    {item.startTime && `${item.startTime.slice(0, 5)} `}
-                    {item.title}
-                    {item.locationName && ` · 📍 ${item.locationName}`}
-                    {item.cost ? ` · ¥${item.cost}` : ""}
-                    {item.transportToNext && ` · 🚗 ${item.transportToNext}`}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div style={{ paddingLeft: 16, color: "#d1d5db" }}>暂无安排</div>
-            )}
-          </div>
-        ))}
+        <ScheduleSummary trip={trip} />
 
         <Divider />
         <div style={{ textAlign: "center", color: "#9ca3af" }}>

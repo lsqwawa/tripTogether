@@ -4,6 +4,7 @@ import {
   STATUS_COLORS,
   TRANSPORT_ICONS,
   TRANSPORT_LABELS,
+  DONE_STATUSES,
 } from "../types";
 import type { Trip } from "../types";
 
@@ -36,9 +37,7 @@ export default function ProgressBoard({ trip }: Props) {
     ),
   ];
   const totalUnits = allUnits.length;
-  const doneUnits = allUnits.filter((u) =>
-    ["confirmed", "completed", "done"].includes(u.status)
-  ).length;
+  const doneUnits = allUnits.filter((u) => DONE_STATUSES.includes(u.status)).length;
   const overallPercent =
     totalUnits === 0 ? 0 : Math.round((doneUnits / totalUnits) * 100);
 
@@ -150,9 +149,7 @@ function getSectionStatus(
   items?: Array<{ status: string }>
 ): string {
   if (!items || items.length === 0) return "pending";
-  const allDone = items.every(
-    (i) => i.status === "confirmed" || i.status === "completed" || i.status === "done"
-  );
+  const allDone = items.every((i) => DONE_STATUSES.includes(i.status));
   if (allDone) return "confirmed";
   const anyBooked = items.some(
     (i) => i.status === "booked" || i.status === "confirmed"
@@ -173,12 +170,7 @@ function getScheduleStatus(
   const doneItems = schedules.reduce(
     (acc, s) =>
       acc +
-      (s.items?.filter(
-        (i) =>
-          i.status === "confirmed" ||
-          i.status === "completed" ||
-          i.status === "done"
-      ).length || 0),
+      (s.items?.filter((i) => DONE_STATUSES.includes(i.status)).length || 0),
     0
   );
   if (doneItems === totalItems) return "confirmed";
