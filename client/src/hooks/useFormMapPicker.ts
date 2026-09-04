@@ -1,13 +1,6 @@
 import { useState } from "react";
 import type { FormInstance } from "antd";
 
-export interface PickedPlace {
-  lat: number;
-  lng: number;
-  name: string;
-  address?: string;
-}
-
 export interface PickedPoint {
   lat: number;
   lng: number;
@@ -15,17 +8,15 @@ export interface PickedPoint {
 }
 
 /**
- * 「地点搜索 + 地图选点 + 坐标回填」组合。
- * 日程与住宿两处逐字重复，差异仅在是否回填 locationName（住宿表单无该字段）。
+ * 「地图选点 + 坐标回填」组合。
+ * 日程与住宿表单共用：打开地图前读表单已有坐标作初始中心点，
+ * 选点后自动回填 lat/lng（地址仍写回 address 供地图标注/分享页展示）。
  */
-export function useFormMapPicker(
-  form: FormInstance,
-  opts?: { fillLocationName?: boolean }
-) {
+export function useFormMapPicker(form: FormInstance) {
   const [open, setOpen] = useState(false);
   const [initial, setInitial] = useState<{ lat?: number; lng?: number }>({});
 
-  // 打开地图前读取当前坐标作初始中心点
+  // 打开地图前读取当前坐标作初始中心点（有经纬度时定位到上次选点）
   const openPicker = () => {
     const lat = Number(form.getFieldValue("lat"));
     const lng = Number(form.getFieldValue("lng"));
@@ -33,19 +24,6 @@ export function useFormMapPicker(
       Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : {}
     );
     setOpen(true);
-  };
-
-  const pickLocation = (loc: PickedPlace) => {
-    const cur = form.getFieldsValue();
-    form.setFieldsValue({
-      ...cur,
-      ...(opts?.fillLocationName
-        ? { locationName: cur.locationName || loc.name }
-        : null),
-      address: cur.address || loc.address || "",
-      lat: loc.lat,
-      lng: loc.lng,
-    });
   };
 
   const pickMapPoint = (p: PickedPoint) => {
@@ -59,5 +37,5 @@ export function useFormMapPicker(
     setOpen(false);
   };
 
-  return { open, initial, openPicker, pickLocation, pickMapPoint, close: () => setOpen(false) };
+  return { open, initial, openPicker, pickMapPoint, close: () => setOpen(false) };
 }

@@ -231,10 +231,9 @@ export default function ScheduleTab({ trip, onUpdate, readOnly, weather }: Sched
             <div className="day-card-header">
               <div>
                 <span className="day-card-title">
-                  第{schedule.dayIndex}天
                   {schedule.title && schedule.title !== `第${schedule.dayIndex}天`
-                    ? ` · ${schedule.title}`
-                    : ""}
+                    ? `${schedule.title}`
+                    : `第${schedule.dayIndex}天`}
                 </span>
                 <span className="day-card-date">
                   {dayjs(schedule.date).format("MM月DD日 ddd")}
@@ -306,7 +305,6 @@ export default function ScheduleTab({ trip, onUpdate, readOnly, weather }: Sched
         destroyOnHidden
       >
         <ScheduleItemForm
-          trip={trip}
           form={form}
           uploading={uploading}
           imageUrlValue={imageUrlValue}

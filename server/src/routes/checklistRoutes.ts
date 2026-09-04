@@ -21,11 +21,9 @@ const VALID_CATEGORIES = [
 // 常用行李模板（一键添加，同名去重）
 const TEMPLATE_ITEMS: Array<{ name: string; category: string }> = [
   { name: "身份证/护照", category: "documents" },
-  { name: "车票/机票凭证", category: "documents" },
-  { name: "酒店预订单", category: "documents" },
-  { name: "现金/银行卡", category: "documents" },
+  { name: "现金", category: "documents" },
   { name: "当季衣物", category: "clothing" },
-  { name: "舒适步行鞋", category: "clothing" },
+  { name: "鞋子", category: "clothing" },
   { name: "雨具", category: "clothing" },
   { name: "手机充电器/充电宝", category: "electronics" },
   { name: "相机", category: "electronics" },

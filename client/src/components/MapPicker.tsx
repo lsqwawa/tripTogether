@@ -229,6 +229,7 @@ export default function MapPicker({ open, initialLat, initialLng, onConfirm, onC
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <AutoComplete
           style={{ flex: 1 }}
+          value={searchValue}
           options={searchOptions}
           onSearch={onSearch}
           onSelect={handleSelect}

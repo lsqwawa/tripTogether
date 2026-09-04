@@ -158,7 +158,7 @@ export default function AccommodationTab({ trip, onUpdate, readOnly }: Accommoda
         forceRender
         destroyOnHidden
       >
-        <AccommodationForm trip={trip} form={form} />
+        <AccommodationForm form={form} />
       </Modal>
     </div>
   );

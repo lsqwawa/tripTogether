@@ -1,8 +1,6 @@
 import { Form, Input, Select, InputNumber } from "antd";
 import type { FormInstance } from "antd";
-import type { Trip } from "../../../types";
 import ResponsiveDatePicker from "../../../components/ResponsiveDatePicker";
-import LocationPicker from "../../../components/LocationPicker";
 import GeoLocationButton from "../../../components/GeoLocationButton";
 import MapPicker from "../../../components/MapPicker";
 import { useFormMapPicker } from "../../../hooks/useFormMapPicker";
@@ -10,13 +8,12 @@ import { useFormMapPicker } from "../../../hooks/useFormMapPicker";
 const { TextArea } = Input;
 
 interface AccommodationFormProps {
-  trip: Trip;
   form: FormInstance;
 }
 
 /** 住宿「添加/编辑」表单内容（不含 locationName 回填） */
-export default function AccommodationForm({ trip, form }: AccommodationFormProps) {
-  const { open, initial, openPicker, pickLocation, pickMapPoint, close } =
+export default function AccommodationForm({ form }: AccommodationFormProps) {
+  const { open, initial, openPicker, pickMapPoint, close } =
     useFormMapPicker(form);
 
   return (
@@ -30,17 +27,34 @@ export default function AccommodationForm({ trip, form }: AccommodationFormProps
           <Input placeholder="例如：京都四条大酒店" />
         </Form.Item>
         <Form.Item label="地点定位">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <LocationPicker city={trip.destination} onPick={pickLocation} />
-            </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <GeoLocationButton onClick={openPicker} />
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>
+              选点后自动回填经纬度，再次点击可在地图上定位到上次选点
+            </span>
           </div>
         </Form.Item>
 
-        <Form.Item name="address" label="地址">
-          <Input placeholder="选点后自动回填，可补充门牌号" />
-        </Form.Item>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Form.Item name="lat" label="纬度" style={{ flex: 1, minWidth: 140 }}>
+            <InputNumber
+              style={{ width: "100%" }}
+              min={-90}
+              max={90}
+              step={0.000001}
+              placeholder="自动回填"
+            />
+          </Form.Item>
+          <Form.Item name="lng" label="经度" style={{ flex: 1, minWidth: 140 }}>
+            <InputNumber
+              style={{ width: "100%" }}
+              min={-180}
+              max={180}
+              step={0.000001}
+              placeholder="自动回填"
+            />
+          </Form.Item>
+        </div>
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <Form.Item
@@ -60,12 +74,6 @@ export default function AccommodationForm({ trip, form }: AccommodationFormProps
             <ResponsiveDatePicker style={{ width: "100%" }} format="YYYY-MM-DD" />
           </Form.Item>
         </div>
-        <Form.Item name="lat" hidden>
-          <Input />
-        </Form.Item>
-        <Form.Item name="lng" hidden>
-          <Input />
-        </Form.Item>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <Form.Item name="cost" label="花费 (¥)" style={{ flex: 1, minWidth: 140 }}>
             <InputNumber style={{ width: "100%" }} min={0} />
