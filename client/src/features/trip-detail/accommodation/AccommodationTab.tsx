@@ -75,6 +75,11 @@ export default function AccommodationTab({ trip, onUpdate, readOnly }: Accommoda
     }
   };
 
+  // 按入住时间升序排列住宿（不修改原数组）
+  const sortedAccommodations = [...(trip.accommodations || [])].sort((a, b) =>
+    (a.checkInDate || "").localeCompare(b.checkInDate || "")
+  );
+
   return (
     <div>
       <div className="flex-between mb-12" style={{ flexWrap: "wrap", gap: 8 }}>
@@ -98,7 +103,7 @@ export default function AccommodationTab({ trip, onUpdate, readOnly }: Accommoda
           尚未添加住宿
         </div>
       ) : (
-        trip.accommodations.map((item) => (
+        sortedAccommodations.map((item) => (
           <Card
             key={item.id}
             size="small"

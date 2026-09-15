@@ -63,7 +63,9 @@ export default function ExportTripImage({ trip, weather }: Props) {
 
   const days = trip.schedules || [];
   const transportations = trip.transportations || [];
-  const accommodations = trip.accommodations || [];
+  const accommodations = [...(trip.accommodations || [])].sort((a, b) =>
+    (a.checkInDate || "").localeCompare(b.checkInDate || "")
+  );
   const members = trip.members || [];
 
   return (

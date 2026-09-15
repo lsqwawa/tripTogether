@@ -80,9 +80,12 @@ export function TransportSummary({
 /** 住宿概要列表（分享页展示，总览页暂未展示） */
 export function AccommodationSummary({ trip }: { trip: Trip }) {
   if (!trip.accommodations || trip.accommodations.length === 0) return null;
+  const sorted = [...trip.accommodations].sort((a, b) =>
+    (a.checkInDate || "").localeCompare(b.checkInDate || "")
+  );
   return (
     <>
-      {trip.accommodations.map((a) => (
+      {sorted.map((a) => (
         <div
           key={a.id}
           style={{
