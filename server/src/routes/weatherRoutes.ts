@@ -1,9 +1,22 @@
 import { Router, Request, Response } from "express";
 import { asyncHandler } from "../middleware/asyncHandler";
+import { WEATHER_CITIES } from "../data/weatherCities";
 
 const router = Router();
 
-// WMO 天气码 → 中文文案 + emoji
+/** 球面直线距离（米），用于经纬度就近匹配城市码 */
+function haversineM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// WMO 天气码 → 中文文案 + emoji（Open-Meteo 兜底源用）
 const WEATHER_CODES: Record<number, { text: string; icon: string }> = {
   0: { text: "晴", icon: "☀️" },
   1: { text: "大部晴朗", icon: "🌤️" },
@@ -73,44 +86,6 @@ export type DayForecast = {
 
 const FETCH_TIMEOUT_MS = 8000;
 
-// 中国天气网天气现象代码（fc.f[].fa 为白天、fb 为夜间，两者取白天优先）
-const CMA_CODES: Record<string, { text: string; icon: string }> = {
-  "00": { text: "晴", icon: "☀️" },
-  "01": { text: "多云", icon: "⛅" },
-  "02": { text: "阴", icon: "☁️" },
-  "03": { text: "阵雨", icon: "🌦️" },
-  "04": { text: "雷阵雨", icon: "⛈️" },
-  "05": { text: "雷阵雨伴冰雹", icon: "⛈️" },
-  "06": { text: "雨夹雪", icon: "🌨️" },
-  "07": { text: "小雨", icon: "🌧️" },
-  "08": { text: "中雨", icon: "🌧️" },
-  "09": { text: "大雨", icon: "🌧️" },
-  10: { text: "暴雨", icon: "🌧️" },
-  11: { text: "大暴雨", icon: "🌧️" },
-  12: { text: "特大暴雨", icon: "🌧️" },
-  13: { text: "阵雪", icon: "🌨️" },
-  14: { text: "小雪", icon: "🌨️" },
-  15: { text: "中雪", icon: "🌨️" },
-  16: { text: "大雪", icon: "❄️" },
-  17: { text: "暴雪", icon: "❄️" },
-  18: { text: "雾", icon: "🌫️" },
-  19: { text: "冻雨", icon: "🌧️" },
-  20: { text: "沙尘暴", icon: "🌪️" },
-  21: { text: "小到中雨", icon: "🌧️" },
-  22: { text: "中到大雨", icon: "🌧️" },
-  23: { text: "大到暴雨", icon: "🌧️" },
-  24: { text: "暴雨到大暴雨", icon: "🌧️" },
-  25: { text: "大暴雨到特大暴雨", icon: "🌧️" },
-  26: { text: "小到中雪", icon: "🌨️" },
-  27: { text: "中到大雪", icon: "🌨️" },
-  28: { text: "大到暴雪", icon: "❄️" },
-  29: { text: "浮尘", icon: "🌫️" },
-  30: { text: "扬沙", icon: "🌫️" },
-  31: { text: "强沙尘暴", icon: "🌪️" },
-  53: { text: "霾", icon: "🌫️" },
-  99: { text: "未知", icon: "🌡️" },
-};
-
 async function httpGet(url: string, headers?: Record<string, string>) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -133,92 +108,178 @@ async function getText(url: string, headers?: Record<string, string>): Promise<s
   return resp.text();
 }
 
-/** 经纬度 → 中国天气网城市 ID（需 TENCENT_MAP_KEY 做逆地理编码，缺 Key 时返回 null） */
-async function cmaCityId(lat: number, lng: number): Promise<string | null> {
-  const key = process.env.TENCENT_MAP_KEY;
-  if (!key) return null;
+// ==================== 中国天气网（主源） ====================
 
-  const geo = await getJson(
-    `https://apis.map.qq.com/ws/geocoder/v1/?location=${lat},${lng}` +
-      `&key=${encodeURIComponent(key)}&get_poi=0`
-  );
-  const city: string = geo?.result?.address_component?.city || "";
-  if (!city) return null;
-
-  const name = city.replace(/市$/, "");
-  const raw = await getText(
-    `http://toy1.weather.com.cn/search?cityname=${encodeURIComponent(name)}`,
-    { Referer: "http://www.weather.com.cn/" }
-  );
-  // 返回是 JSONP：({...})，去掉外层括号后再解析
-  const list = JSON.parse(raw.trim().replace(/^\(/, "").replace(/\)$/, ""));
-  const ref = Array.isArray(list) ? String(list[0]?.ref || "") : "";
-  const id = ref.split("~")[0];
-  return /^\d{9}$/.test(id) ? id : null;
+/**
+ * 中国天气网文案 → emoji，按恶劣程度优先。
+ * 月历接口的 w1 是"晴转多云"这类文案而非代码，"X转Y"取更恶劣的一侧
+ * （出行场景更关心会不会下雨下雪）。
+ */
+export function textToIcon(text: string): string {
+  const t = text || "";
+  if (t.includes("雷") || t.includes("雹")) return "⛈️";
+  if (t.includes("雪")) return t.includes("暴") ? "❄️" : "🌨️";
+  if (t.includes("雨")) return t.includes("阵雨") ? "🌦️" : "🌧️";
+  if (t.includes("沙") || t.includes("尘")) return "🌪️";
+  if (t.includes("霾")) return "😷";
+  if (t.includes("雾")) return "🌫️";
+  if (t.includes("阴")) return "☁️";
+  if (t.includes("云")) return "⛅";
+  if (t.includes("晴")) return "☀️";
+  return "🌡️";
 }
 
-/** 中国天气网：返回以 YYYY-MM-DD 为键的逐日预报（通常覆盖今天起 5 天） */
-async function fetchCma(lat: number, lng: number): Promise<Record<string, DayForecast>> {
-  const cityId = await cmaCityId(lat, lng);
-  if (!cityId) return {};
+// 中国范围粗略边界框；框外视为境外，直接走 Open-Meteo（全球数据）
+const CN_BBOX = { latMin: 3.5, latMax: 54, lngMin: 73, lngMax: 135.5 };
+const MAX_CITY_DIST_M = 300_000;
 
-  const html = await getText(`http://d1.weather.com.cn/weather_index/${cityId}.html`, {
-    Referer: "http://www.weather.com.cn/",
-  });
-  const m = html.match(/var\s+fc\s*=\s*(\{[\s\S]*?\})\s*;?/);
-  if (!m) return {};
+/**
+ * 经纬度 → 中国天气网城市码：内嵌城市码表（427 城，含坐标）就近匹配，
+ * 完全离线，不依赖任何逆地理编码 Key（即便配了腾讯 Key 也不走网络）。
+ * 之所以不用「腾讯逆地理 + toy1.weather.com.cn 名称搜索」的历史方案：
+ * toy1 搜索接口已失效（返回空 JSONP），且离线就近匹配免配额、更快。
+ * 境外坐标或距最近城市 >300km 返回 null。
+ */
+export function nearestCityCode(lat: number, lng: number): string | null {
+  if (
+    lat < CN_BBOX.latMin || lat > CN_BBOX.latMax ||
+    lng < CN_BBOX.lngMin || lng > CN_BBOX.lngMax
+  ) {
+    return null;
+  }
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const c of WEATHER_CITIES) {
+    const d = haversineM({ lat, lng }, { lat: c.lat, lng: c.lon });
+    if (d < bestDist) {
+      bestDist = d;
+      best = c.code;
+    }
+  }
+  return bestDist <= MAX_CITY_DIST_M ? best : null;
+}
 
-  const list = JSON.parse(m[1])?.f;
-  if (!Array.isArray(list) || list.length === 0) return {};
+// 月历条目（d1.weather.com.cn/calendar_new 的 fc40 数组元素，仅列用到的字段）
+interface CalEntry {
+  date: string; // YYYYMMDD
+  w1?: string; // 天气文案：15 天档有值；40 天档/过去日期为空
+  max?: string; // 预报最高温
+  min?: string; // 预报最低温
+  hmax?: string; // 历史均值/实测最高温（过去日期用）
+  hmin?: string;
+}
 
-  const out: Record<string, DayForecast> = {};
-  const today = new Date();
-  let py = today.getFullYear();
-  let pm = today.getMonth() + 1;
-  let pd = today.getDate();
+// 月历缓存：预报每天更新约两次，30 分钟 TTL 足够，避免高频打上游
+const MONTH_TTL_MS = 30 * 60 * 1000;
+const monthCache = new Map<string, { ts: number; entries: CalEntry[] }>();
 
-  for (const it of list) {
-    const parts = String(it?.fi || "").split("/");
-    if (parts.length !== 2) continue;
-    const mm = Number(parts[0]);
-    const dd = Number(parts[1]);
-    if (!Number.isInteger(mm) || !Number.isInteger(dd)) continue;
-    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) continue;
+const CMA_HEADERS = {
+  // 非官方网页接口：缺 Referer 会 403
+  Referer: "http://www.weather.com.cn/",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+};
 
-    // 接口只给「月/日」，年份靠递增推断：比上一条小即视为跨年
-    let year = py;
-    if (mm < pm || (mm === pm && dd < pd)) year = py + 1;
-    py = year;
-    pm = mm;
-    pd = dd;
-    const date = `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+async function fetchCalendarMonth(cityCode: string, yyyymm: string): Promise<CalEntry[]> {
+  const cacheKey = `${cityCode}_${yyyymm}`;
+  const cached = monthCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < MONTH_TTL_MS) return cached.entries;
 
-    const tmax = Number(it?.fc);
-    const tmin = Number(it?.fd);
-    if (!Number.isFinite(tmax) || !Number.isFinite(tmin)) continue;
+  try {
+    const s = await getText(
+      `https://d1.weather.com.cn/calendar_new/${yyyymm.slice(0, 4)}/${cityCode}_${yyyymm}.html`,
+      CMA_HEADERS
+    );
+    // 响应形如 `var fc40 = [{...},{...}]`，取首个 [ 到最后一个 ] 之间做 JSON
+    const lb = s.indexOf("[");
+    const rb = s.lastIndexOf("]");
+    if (lb < 0 || rb <= lb) return [];
+    const entries = JSON.parse(s.slice(lb, rb + 1));
+    if (!Array.isArray(entries)) return [];
+    if (monthCache.size > 200) {
+      const now = Date.now();
+      for (const [k, v] of monthCache) {
+        if (now - v.ts >= MONTH_TTL_MS) monthCache.delete(k);
+      }
+    }
+    monthCache.set(cacheKey, { ts: Date.now(), entries });
+    return entries;
+  } catch {
+    return []; // 上游异常：静默，由调用方兜底
+  }
+}
 
-    const code = String(it?.fa ?? it?.fb ?? "99").padStart(2, "0");
-    const info = CMA_CODES[code] || CMA_CODES["99"];
-    const pf = Number(it?.fm);
-    const pn = Number(it?.fn);
-    let precipProb: number | null = null;
-    if (Number.isFinite(pf) && Number.isFinite(pn)) precipProb = Math.round((pf + pn) / 2);
-    else if (Number.isFinite(pf)) precipProb = Math.round(pf);
-    else if (Number.isFinite(pn)) precipProb = Math.round(pn);
+function firstNum(...vals: (string | undefined)[]): number | null {
+  for (const v of vals) {
+    const t = String(v ?? "").trim();
+    if (!t) continue;
+    const n = Number(t);
+    if (Number.isFinite(n)) return Math.round(n);
+  }
+  return null;
+}
 
-    out[date] = {
-      date,
-      text: info.text,
-      icon: info.icon,
-      tmax: Math.round(tmax),
-      tmin: Math.round(tmin),
-      precipProb,
-    };
+function monthsBetween(startISO: string, endISO: string): string[] {
+  const out: string[] = [];
+  const cur = new Date(`${startISO}T00:00:00`);
+  const end = new Date(`${endISO}T00:00:00`);
+  while (cur.getTime() <= end.getTime() && out.length < 3) {
+    out.push(`${cur.getFullYear()}${String(cur.getMonth() + 1).padStart(2, "0")}`);
+    cur.setMonth(cur.getMonth() + 1);
   }
   return out;
 }
 
-/** Open-Meteo：免 Key，窗口约 16 天，用于兜底与中国天气网覆盖不到的日期 */
+/**
+ * 中国天气网：月历接口覆盖整月网格（15 天档含文案+气温，40 天档仅气温，
+ * 过去日期仅历史气温），比 weather_index 的 5~7 天预报覆盖完整得多。
+ * 返回以 YYYY-MM-DD 为键的逐日预报；无文案的条目 text 为空串、
+ * icon 为 🌡️，路由层会用 Open-Meteo 优先升级这些日期。
+ */
+async function fetchCma(
+  lat: number,
+  lng: number,
+  startISO: string,
+  endISO: string
+): Promise<Record<string, DayForecast>> {
+  const cityCode = nearestCityCode(lat, lng);
+  if (!cityCode) return {};
+
+  const months = monthsBetween(startISO, endISO);
+  const monthEntries = await Promise.all(months.map((m) => fetchCalendarMonth(cityCode, m)));
+
+  const out: Record<string, DayForecast> = {};
+  const scores: Record<string, number> = {};
+  monthEntries.forEach((entries, mi) => {
+    const homeMonth = `${months[mi].slice(0, 4)}-${months[mi].slice(4)}`;
+    for (const e of entries) {
+      if (!/^\d{8}$/.test(String(e.date))) continue;
+      const iso = `${e.date.slice(0, 4)}-${e.date.slice(4, 6)}-${e.date.slice(6, 8)}`;
+      if (iso < startISO || iso > endISO) continue;
+      const tmax = firstNum(e.max, e.hmax);
+      const tmin = firstNum(e.min, e.hmin);
+      if (tmax === null || tmin === null) continue;
+      const text = String(e.w1 || "").trim();
+      // 月历网格含前后跨月日期；同一天优先取"归属月"且带文案的条目
+      const score = (text ? 2 : 0) + (iso.slice(0, 7) === homeMonth ? 1 : 0);
+      if (scores[iso] !== undefined && score <= scores[iso]) continue;
+      scores[iso] = score;
+      out[iso] = {
+        date: iso,
+        text,
+        icon: textToIcon(text),
+        tmax,
+        tmin,
+        precipProb: null, // 月历接口不提供降水概率
+      };
+    }
+  });
+  return out;
+}
+
+// ==================== Open-Meteo（兜底源） ====================
+
+/** Open-Meteo：免 Key，窗口约 16 天，用于境外坐标与补齐中国天气网缺口 */
 async function fetchOpenMeteo(
   lat: number,
   lng: number,
@@ -266,8 +327,9 @@ export function enumerateDates(start: string, end: string): string[] {
 
 /**
  * 天气代理：GET /api/weather?lat&lng&start&end
- * 主数据源中国天气网（需 TENCENT_MAP_KEY 做逆地理编码，覆盖今天起约 5 天），
- * 其覆盖不到的日期由 Open-Meteo（免 Key，窗口约 16 天）补齐；
+ * 主数据源中国天气网（月历接口，内嵌城市码表就近匹配，15 天档含文案，
+ * 40 天档与过去日期仅气温）；无文案的日期及境外坐标由 Open-Meteo
+ * （免 Key，窗口约 16 天，含降水概率）补齐/升级。
  * 请求范围会被夹取到可用窗口内，完全超窗或上游全部失败返回空数组，
  * 前端静默降级不阻塞主流程。响应带 source 字段便于排障。
  */
@@ -287,7 +349,7 @@ router.get(
     }
 
     // 日期校验必须早于夹取：否则 new Date("abc") 得到 NaN，
-    // Math.max(NaN, x) 仍为 NaN，toISODate 里 toISOString() 会抛 RangeError → 500
+    // Math.max(NaN, x) 仍为 NaN，toISODate 里会抛 RangeError → 500
     if (!isValidDate(start) || !isValidDate(end)) {
       return res.status(400).json({ error: "日期格式无效，应为 YYYY-MM-DD" });
     }
@@ -313,19 +375,23 @@ router.get(
     const byDate: Record<string, DayForecast> = {};
     const sources: string[] = [];
 
-    // 1) 中国天气网（境内访问更稳，但仅覆盖约 5 天）
+    // 1) 中国天气网月历（境内主源）
+    let cmaUsed = false;
     try {
-      const cma = await fetchCma(lat, lng);
+      const cma = await fetchCma(lat, lng, clampedStart, clampedEnd);
       for (const d of dates) {
-        if (cma[d]) byDate[d] = cma[d];
+        if (cma[d]) {
+          byDate[d] = cma[d];
+          cmaUsed = true;
+        }
       }
-      if (Object.keys(byDate).length) sources.push("cma");
     } catch {
-      // 中国天气网不可用（缺 Key / 逆地理失败 / 上游异常）：静默，交由 Open-Meteo 兜底
+      // 中国天气网不可用（境外坐标 / 上游异常）：静默，交由 Open-Meteo 兜底
     }
+    if (cmaUsed) sources.push("cma");
 
-    // 2) 中国天气网没覆盖到的日期，用 Open-Meteo 补齐
-    const missing = dates.filter((d) => !byDate[d]);
+    // 2) CMA 未覆盖或仅气温（无文案）的日期，用 Open-Meteo 补齐/升级
+    const missing = dates.filter((d) => !byDate[d]?.text);
     if (missing.length) {
       try {
         const om = await fetchOpenMeteo(lat, lng, clampedStart, clampedEnd);
@@ -338,7 +404,7 @@ router.get(
         }
         if (added) sources.push("open-meteo");
       } catch {
-        // 两个数据源都不可用：静默降级
+        // 两个数据源都不可用：静默降级，CMA 的仅气温条目仍会输出
       }
     }
 
