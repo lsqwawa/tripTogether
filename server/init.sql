@@ -84,13 +84,7 @@ CREATE TABLE IF NOT EXISTS transportations (
   "depLat"       double precision,
   "depLng"       double precision,
   "arrLat"       double precision,
-  "arrLng"       double precision,
-  "distanceM"    double precision,
-  "durationMin"  double precision,
-  polyline       text,
-  "fromItemId"   varchar,
-  "toItemId"     varchar,
-  matched        boolean NOT NULL DEFAULT false
+  "arrLng"       double precision
 );
 
 -- 住宿
@@ -137,12 +131,6 @@ CREATE TABLE IF NOT EXISTS schedule_items (
   notes            text,
   "imageUrl"       varchar,
   "transportToNext" varchar,
-  "legMode"        varchar,
-  "legDistanceM"   double precision,
-  "legDurationMin" double precision,
-  "legPolyline"    text,
-  "legSummary"     varchar,
-  "legAutoMatched" boolean NOT NULL DEFAULT false,
   status           varchar NOT NULL DEFAULT 'pending',
   "version"        integer NOT NULL DEFAULT 1                 -- 乐观锁：编辑冲突检测(8.2)
 );
@@ -200,19 +188,23 @@ ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "depLng" double precision;
 ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "arrLat" double precision;
 ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "arrLng" double precision;
 -- -----------------------------------------------------------------------------
--- 2026-08-31 追加：交通信息匹配（结构化接驳 + 城际草稿）。
-ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legMode" varchar;
-ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legDistanceM" double precision;
-ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legDurationMin" double precision;
-ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legPolyline" text;
-ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legSummary" varchar;
-ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS "legAutoMatched" boolean NOT NULL DEFAULT false;
-ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "distanceM" double precision;
-ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "durationMin" double precision;
-ALTER TABLE transportations ADD COLUMN IF NOT EXISTS polyline text;
-ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "fromItemId" varchar;
-ALTER TABLE transportations ADD COLUMN IF NOT EXISTS "toItemId" varchar;
-ALTER TABLE transportations ADD COLUMN IF NOT EXISTS matched boolean NOT NULL DEFAULT false;
+-- 2026-09-16 移除：交通信息匹配（结构化接驳 + 城际草稿）功能下线，删除相关列。
+-- 生效方式取决于 DB_SYNCHRONIZE（database.ts，默认 true）：
+--   · =true（开发库与当前生产实况）：实体已删字段，重启服务时 TypeORM 自动 DROP 这些列，无需手动执行本段。
+--   · =false：synchronize 不改表结构，须手动跑本脚本（psql -d <库名> -f init.sql）或单独执行以下 DROP。
+-- 本段 DROP 幂等（IF EXISTS），两种模式下执行都安全，仅用于保持可移植脚本与实体一致。
+ALTER TABLE schedule_items DROP COLUMN IF EXISTS "legMode";
+ALTER TABLE schedule_items DROP COLUMN IF EXISTS "legDistanceM";
+ALTER TABLE schedule_items DROP COLUMN IF EXISTS "legDurationMin";
+ALTER TABLE schedule_items DROP COLUMN IF EXISTS "legPolyline";
+ALTER TABLE schedule_items DROP COLUMN IF EXISTS "legSummary";
+ALTER TABLE schedule_items DROP COLUMN IF EXISTS "legAutoMatched";
+ALTER TABLE transportations DROP COLUMN IF EXISTS "distanceM";
+ALTER TABLE transportations DROP COLUMN IF EXISTS "durationMin";
+ALTER TABLE transportations DROP COLUMN IF EXISTS polyline;
+ALTER TABLE transportations DROP COLUMN IF EXISTS "fromItemId";
+ALTER TABLE transportations DROP COLUMN IF EXISTS "toItemId";
+ALTER TABLE transportations DROP COLUMN IF EXISTS matched;
 -- =============================================================================
 
 -- 完成提示

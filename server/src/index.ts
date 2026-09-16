@@ -11,8 +11,6 @@ import planRoutes from "./routes/planRoutes";
 import userRoutes from "./routes/userRoutes";
 import expenseRoutes from "./routes/expenseRoutes";
 import shareRoutes from "./routes/shareRoutes";
-import transportLookupRoutes from "./routes/transportLookup";
-import transportMatchRoutes from "./routes/transportMatchRoutes";
 import checklistRoutes from "./routes/checklistRoutes";
 import weatherRoutes from "./routes/weatherRoutes";
 import uploadRoutes from "./routes/uploadRoutes";
@@ -44,7 +42,6 @@ app.use("/api/users", userRoutes);
 app.use("/api/trips", authenticate, tripRoutes);
 app.use("/api/trips/:tripId", authenticate, planRoutes);
 app.use("/api/trips/:tripId/expenses", authenticate, expenseRoutes);
-app.use("/api/trips/:tripId", authenticate, transportMatchRoutes);
 app.use("/api/trips/:tripId/checklist", authenticate, checklistRoutes);
 
 // 天气代理：需登录（避免成为匿名出站代理被滥用），按 IP 限流
@@ -59,9 +56,6 @@ app.use(
   }),
   weatherRoutes
 );
-
-// 交通班次查询代理（航班/火车）：登录即可用
-app.use("/api/transport-lookup", transportLookupRoutes);
 
 // 图片上传（登录即可用，内部已挂 authenticate）
 app.use("/api/upload", uploadRoutes);

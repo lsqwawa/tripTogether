@@ -40,12 +40,6 @@ const TRANSPORTATION_FIELDS = [
   "depLng",
   "arrLat",
   "arrLng",
-  "distanceM",
-  "durationMin",
-  "polyline",
-  "fromItemId",
-  "toItemId",
-  "matched",
 ] as const;
 
 const ACCOMMODATION_FIELDS = [
@@ -78,12 +72,6 @@ const ITEM_FIELDS = [
   "imageUrl",
   "transportToNext",
   "status",
-  "legMode",
-  "legDistanceM",
-  "legDurationMin",
-  "legPolyline",
-  "legSummary",
-  "legAutoMatched",
 ] as const;
 
 // ==================== 交通 ====================
@@ -285,18 +273,7 @@ router.patch(
       });
     }
 
-    // 人工编辑任一接驳字段时，将该段标记为人工维护，避免被下一次自动匹配覆盖
-    const LEG_DATA_FIELDS = [
-      "legMode",
-      "legDistanceM",
-      "legDurationMin",
-      "legPolyline",
-      "legSummary",
-    ] as const;
-    const hasLegEdit = LEG_DATA_FIELDS.some((k) => rest[k] !== undefined);
-
     Object.assign(item, pick(rest, ITEM_FIELDS));
-    if (hasLegEdit) item.legAutoMatched = false;
     item.version = (item.version ?? 0) + 1;
     await repo.save(item);
     res.json(item);

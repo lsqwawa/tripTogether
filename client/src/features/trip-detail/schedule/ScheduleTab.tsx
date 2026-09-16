@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, Form, Modal } from "antd";
 import { App as AntApp } from "antd";
-import { PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import {
   DndContext,
@@ -18,11 +18,10 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import type { Trip, ScheduleItem, WeatherDay } from "../../../types";
-import { scheduleApi, uploadApi, transportMatchApi } from "../../../api";
+import { scheduleApi, uploadApi } from "../../../api";
 import { getErrorMessage, isHandledStatus } from "../../../utils/error";
 import ScheduleItemCard from "./ScheduleItemCard";
 import ScheduleItemForm from "./ScheduleItemForm";
-import LegEditModal from "./LegEditModal";
 import ConflictModal from "./ConflictModal";
 
 interface ScheduleTabProps {
@@ -41,9 +40,6 @@ export default function ScheduleTab({ trip, onUpdate, readOnly, weather }: Sched
   const [conflictLatest, setConflictLatest] = useState<ScheduleItem | null>(null);
   const [uploading, setUploading] = useState(false);
   const imageUrlValue = Form.useWatch("imageUrl", form) as string | undefined;
-  const [matching, setMatching] = useState(false);
-  // 接驳编辑对象；null 即关闭。单例 Modal，卡片不再各自持有
-  const [editingLegItem, setEditingLegItem] = useState<ScheduleItem | null>(null);
 
   // 仅记录被拖拽过的天，覆盖顺序；其余直接读服务端顺序（P1-05）
   const [pendingOrder, setPendingOrder] = useState<Record<string, string[]>>({});
@@ -181,49 +177,8 @@ export default function ScheduleTab({ trip, onUpdate, readOnly, weather }: Sched
     }
   };
 
-  const handleMatchTransport = async () => {
-    setMatching(true);
-    try {
-      const res = await transportMatchApi.match(trip.id);
-      const parts = [`已匹配 ${res.legsApplied} 段接驳`];
-      if (res.skippedNoCoord > 0) parts.push(`跳过 ${res.skippedNoCoord} 段（缺坐标）`);
-      if (res.intercityDrafts?.length) parts.push(`生成 ${res.intercityDrafts.length} 条城际草稿待确认`);
-      message.success(parts.join("，"));
-      onUpdate();
-    } catch (e) {
-      message.error(getErrorMessage(e, "匹配失败，请稍后重试"));
-    } finally {
-      setMatching(false);
-    }
-  };
-
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 12,
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <span style={{ color: "#6b7280", fontSize: 13 }}>
-          🚗 系统可基于日程项坐标，自动推算相邻景点的接驳方式与城际交通草稿
-        </span>
-        {!readOnly && (
-          <Button
-            type="primary"
-            size="small"
-            icon={<ThunderboltOutlined />}
-            loading={matching}
-            onClick={handleMatchTransport}
-          >
-            一键匹配接驳
-          </Button>
-        )}
-      </div>
       {trip.schedules?.map((schedule) => {
         const items = itemsByScheduleId[schedule.id] || [];
         return (
@@ -273,10 +228,7 @@ export default function ScheduleTab({ trip, onUpdate, readOnly, weather }: Sched
                       onEdit={() => openEditModal(item)}
                       onDelete={() => handleDelete(item)}
                       onToggle={() => toggleStatus(item)}
-                      onEditLeg={() => setEditingLegItem(item)}
                       readOnly={readOnly}
-                      tripId={trip.id}
-                      onLegUpdated={onUpdate}
                     />
                   ))}
                 </SortableContext>
@@ -329,13 +281,6 @@ export default function ScheduleTab({ trip, onUpdate, readOnly, weather }: Sched
           setModalOpen(false);
           onUpdate();
         }}
-      />
-
-      <LegEditModal
-        item={editingLegItem}
-        tripId={trip.id}
-        onClose={() => setEditingLegItem(null)}
-        onUpdated={onUpdate}
       />
     </div>
   );

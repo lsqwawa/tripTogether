@@ -5,27 +5,15 @@ import {
   TRANSPORT_ICONS,
 } from "../../../types";
 import ResponsiveDatePicker from "../../../components/ResponsiveDatePicker";
-import TransportLookupPreview from "./TransportLookupPreview";
-import type { TransportLookupState } from "./useTransportLookup";
 
 const { TextArea } = Input;
 
 interface TransportFormProps {
   form: FormInstance;
-  lookup: TransportLookupState | null;
-  lookupLoading: boolean;
-  lookupError: string | null;
-  onBackfill: () => void;
 }
 
 /** 交通「添加/编辑」表单内容 */
-export default function TransportForm({
-  form,
-  lookup,
-  lookupLoading,
-  lookupError,
-  onBackfill,
-}: TransportFormProps) {
+export default function TransportForm({ form }: TransportFormProps) {
   return (
     <Form form={form} layout="vertical">
       <Form.Item name="type" hidden>
@@ -93,14 +81,6 @@ export default function TransportForm({
       <Form.Item name="bookingInfo" label="预订信息">
         <Input placeholder="航班号/车次号/订单号" />
       </Form.Item>
-
-      {/* 班次实时查询预览 */}
-      <TransportLookupPreview
-        lookup={lookup}
-        loading={lookupLoading}
-        error={lookupError}
-        onBackfill={onBackfill}
-      />
 
       <Form.Item name="notes" label="备注">
         <TextArea rows={2} />

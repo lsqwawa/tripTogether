@@ -23,7 +23,6 @@ const shareRateLimit = rateLimit({
 //   - Expense 表（含 payerId / participantIds 等成员 UUID 与出资明细）
 //   - 用户 UUID：成员只保留昵称与头像
 //   - bookingInfo（订单号/座位号/确认码）与 notes（私人备注）
-//   - 交通匹配的内部字段（polyline / fromItemId / toItemId / matched 等）
 //   - budgetTotal（行程总预算）
 // 注：inviteCode 与各项 cost 是分享页要渲染的内容（访客本就持有邀请码），予以保留。
 router.get(

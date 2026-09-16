@@ -95,19 +95,6 @@ export const transportApi = {
     client.delete(`/trips/${tripId}/transportations/${id}`).then((r) => r.data),
 };
 
-// ==================== 交通班次查询（代理） =================
-
-export const transportLookupApi = {
-  get: (type: "flight" | "train", code: string) =>
-    client
-      .get<{
-        success: boolean;
-        source: "aviationstack" | "mock" | "12306";
-        data: any;
-      }>("/transport-lookup", { params: { type, code } })
-      .then((r) => r.data),
-};
-
 // ==================== 图片上传 =================
 
 export const uploadApi = {
@@ -260,52 +247,4 @@ export const weatherApi = {
     client
       .get<{ days: WeatherDay[] }>("/weather", { params })
       .then((r) => r.data.days),
-};
-
-// ==================== Transport Match（交通匹配） ====================
-
-export const transportMatchApi = {
-  match: (tripId: string) =>
-    client
-      .post<{
-        legsApplied: number;
-        legsTotal: number;
-        skippedNoCoord: number;
-        intercityDrafts: Transportation[];
-        via: string | null;
-        message?: string;
-      }>(`/trips/${tripId}/match-transport`)
-      .then((r) => r.data),
-
-  legs: (tripId: string) =>
-    client
-      .get<{ legs: ScheduleItem[]; drafts: Transportation[] }>(
-        `/trips/${tripId}/transport-legs`
-      )
-      .then((r) => r.data),
-
-  updateLeg: (
-    tripId: string,
-    itemId: string,
-    data: {
-      legMode?: string;
-      legSummary?: string;
-      legDistanceM?: number;
-      legDurationMin?: number;
-    }
-  ) =>
-    client
-      .patch<ScheduleItem>(`/trips/${tripId}/schedule-items/${itemId}/transport`, data)
-      .then((r) => r.data),
-
-  // 删除某段接驳（匹配错了可清除重来）
-  clearLeg: (tripId: string, itemId: string) =>
-    client
-      .delete<ScheduleItem>(`/trips/${tripId}/schedule-items/${itemId}/transport`)
-      .then((r) => r.data),
-
-  confirm: (tripId: string, id: string, data?: Partial<Transportation>) =>
-    client
-      .patch<Transportation>(`/trips/${tripId}/transportations/${id}/confirm`, data || {})
-      .then((r) => r.data),
 };

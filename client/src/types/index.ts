@@ -133,12 +133,6 @@ export interface Transportation {
   depLng?: number;
   arrLat?: number;
   arrLng?: number;
-  distanceM?: number;
-  durationMin?: number;
-  polyline?: string;
-  fromItemId?: string;
-  toItemId?: string;
-  matched?: boolean;
 }
 
 export interface Accommodation {
@@ -183,12 +177,6 @@ export interface ScheduleItem {
   notes?: string;
   imageUrl?: string;
   transportToNext?: string;
-  legMode?: "walking" | "driving" | "transit" | "intercity" | "none" | null;
-  legDistanceM?: number;
-  legDurationMin?: number;
-  legPolyline?: string;
-  legSummary?: string;
-  legAutoMatched?: boolean;
   status: PlanStatus;
   version?: number;
 }

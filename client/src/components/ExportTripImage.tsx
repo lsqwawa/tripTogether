@@ -16,13 +16,6 @@ interface Props {
   weather?: Record<string, WeatherDay>;
 }
 
-const LEG_ICONS: Record<string, string> = {
-  walking: "🚶",
-  driving: "🚗",
-  transit: "🚌",
-  intercity: "🚄",
-};
-
 /**
  * 行程一键导出分享长图：渲染导出专用模板（纯内联样式，不含地图/外部图片，
  * 避免 WebGL 无法截图与跨域污染 canvas），html2canvas 转 PNG 下载。
@@ -245,7 +238,7 @@ export default function ExportTripImage({ trip, weather }: Props) {
                           {item.locationName && ` · 📍${item.locationName}`}
                           {item.cost ? ` · ¥${item.cost}` : ""}
                         </div>
-                        {(item.legSummary || item.transportToNext) && (
+                        {item.transportToNext && (
                           <div
                             style={{
                               fontSize: 12,
@@ -253,8 +246,7 @@ export default function ExportTripImage({ trip, weather }: Props) {
                               padding: "0 0 4px 36px",
                             }}
                           >
-                            {LEG_ICONS[item.legMode || ""] || "🚗"}{" "}
-                            {item.legSummary || `到下一站：${item.transportToNext}`}
+                            🚗 到下一站：{item.transportToNext}
                           </div>
                         )}
                       </div>

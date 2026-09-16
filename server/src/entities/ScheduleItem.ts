@@ -60,25 +60,6 @@ export class ScheduleItem {
   @Column({ type: "varchar", nullable: true })
   transportToNext: string;
 
-  // ===== 结构化接驳字段（交通信息匹配）=====
-  @Column({ type: "varchar", nullable: true })
-  legMode: string; // walking | driving | transit | intercity | none
-
-  @Column({ type: "float", nullable: true })
-  legDistanceM: number; // 接驳距离（米）
-
-  @Column({ type: "float", nullable: true })
-  legDurationMin: number; // 接驳时长（分钟）
-
-  @Column({ type: "text", nullable: true })
-  legPolyline: string; // GCJ-02 坐标点 JSON：[{lat,lng},...]
-
-  @Column({ type: "varchar", nullable: true })
-  legSummary: string; // 展示文案，如「驾车约 12 分钟 · 3.2 km」
-
-  @Column({ type: "boolean", default: false })
-  legAutoMatched: boolean; // 是否系统自动匹配（人工修改后置 false，重跑不覆盖）
-
   @Column({ type: "varchar", default: "pending" })
   status: string;
 

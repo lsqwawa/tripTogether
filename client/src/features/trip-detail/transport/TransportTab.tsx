@@ -8,8 +8,6 @@ import { getErrorMessage } from "../../../utils/error";
 import { getLatLngbyAddress } from "../../../utils/tencentMap";
 import TransportForm from "./TransportForm";
 import TransportSectionList from "./TransportSectionList";
-import TransportConfirmModal from "./TransportConfirmModal";
-import { useTransportLookup } from "./useTransportLookup";
 
 interface TransportTabProps {
   trip: Trip;
@@ -22,19 +20,11 @@ export default function TransportTab({ trip, onUpdate, readOnly }: TransportTabP
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Transportation | null>(null);
   const [form] = Form.useForm();
-  const [confirmingItem, setConfirmingItem] = useState<Transportation | null>(null);
-
-  // 监听「交通方式 + 预订信息」防抖查询班次
-  const lookupType = Form.useWatch("transportType", form);
-  const lookupCode = Form.useWatch("bookingInfo", form);
-  const { lookup, lookupLoading, lookupError, resetLookup } =
-    useTransportLookup(lookupType, lookupCode);
 
   const openAdd = (type: "departure" | "return" | "intercity") => {
     setEditingItem(null);
     form.resetFields();
     form.setFieldsValue({ type, transportType: "flight", status: "pending" });
-    resetLookup();
     setModalOpen(true);
   };
 
@@ -45,28 +35,7 @@ export default function TransportTab({ trip, onUpdate, readOnly }: TransportTabP
       departureTime: item.departureTime ? dayjs(item.departureTime) : undefined,
       arrivalTime: item.arrivalTime ? dayjs(item.arrivalTime) : undefined,
     });
-    resetLookup();
     setModalOpen(true);
-  };
-
-  // 把查询结果回填到表单
-  const backfillFromLookup = () => {
-    if (!lookup) return;
-    const d = lookup.data;
-    const set: Record<string, unknown> = {};
-    if (lookup.type === "flight") {
-      if (d.departure?.airport) set.departurePlace = d.departure.airport;
-      if (d.arrival?.airport) set.arrivalPlace = d.arrival.airport;
-      if (d.departure?.scheduled) set.departureTime = dayjs(d.departure.scheduled);
-      if (d.arrival?.scheduled) set.arrivalTime = dayjs(d.arrival.scheduled);
-      form.setFieldsValue(set);
-      message.success("已回填航班起降信息");
-    } else {
-      if (d.fromStation) set.departurePlace = d.fromStation;
-      if (d.toStation) set.arrivalPlace = d.toStation;
-      form.setFieldsValue(set);
-      message.success("已回填车次起终站信息");
-    }
   };
 
   const handleSave = async () => {
@@ -143,7 +112,6 @@ export default function TransportTab({ trip, onUpdate, readOnly }: TransportTabP
         onAdd={openAdd}
         onEdit={openEdit}
         onDelete={handleDelete}
-        onConfirm={setConfirmingItem}
       />
       <Divider />
       <TransportSectionList
@@ -155,7 +123,6 @@ export default function TransportTab({ trip, onUpdate, readOnly }: TransportTabP
         onAdd={openAdd}
         onEdit={openEdit}
         onDelete={handleDelete}
-        onConfirm={setConfirmingItem}
       />
       <Divider />
       <TransportSectionList
@@ -167,7 +134,6 @@ export default function TransportTab({ trip, onUpdate, readOnly }: TransportTabP
         onAdd={openAdd}
         onEdit={openEdit}
         onDelete={handleDelete}
-        onConfirm={setConfirmingItem}
       />
 
       <Modal
@@ -181,21 +147,8 @@ export default function TransportTab({ trip, onUpdate, readOnly }: TransportTabP
         forceRender
         destroyOnHidden
       >
-        <TransportForm
-          form={form}
-          lookup={lookup}
-          lookupLoading={lookupLoading}
-          lookupError={lookupError}
-          onBackfill={backfillFromLookup}
-        />
+        <TransportForm form={form} />
       </Modal>
-
-      <TransportConfirmModal
-        tripId={trip.id}
-        item={confirmingItem}
-        onClose={() => setConfirmingItem(null)}
-        onConfirmed={onUpdate}
-      />
     </div>
   );
 }

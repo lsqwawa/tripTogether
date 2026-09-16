@@ -1,5 +1,5 @@
-import { Button, Card, Tag, Tooltip, Popconfirm } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import { Button, Card, Tag, Popconfirm } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Transportation } from "../../../types";
 import {
@@ -18,7 +18,6 @@ interface TransportSectionListProps {
   onAdd: (type: "departure" | "return" | "intercity") => void;
   onEdit: (item: Transportation) => void;
   onDelete: (id: string) => void;
-  onConfirm: (item: Transportation) => void;
 }
 
 export default function TransportSectionList({
@@ -30,7 +29,6 @@ export default function TransportSectionList({
   onAdd,
   onEdit,
   onDelete,
-  onConfirm,
 }: TransportSectionListProps) {
   return (
     <div style={{ marginBottom: 20 }}>
@@ -66,13 +64,6 @@ export default function TransportSectionList({
               readOnly
                 ? undefined
                 : [
-                    ...(type === "intercity" && item.matched
-                      ? [
-                          <Tooltip key="confirm" title="确认采纳草稿">
-                            <CheckCircleOutlined onClick={() => onConfirm(item)} />
-                          </Tooltip>,
-                        ]
-                      : []),
                     <Popconfirm
                       key="delete"
                       title="确认删除？"
@@ -116,11 +107,7 @@ export default function TransportSectionList({
                   </div>
                 )}
               </div>
-              {item.matched ? (
-                <Tag color="gold">待确认草稿</Tag>
-              ) : (
-                <Tag color={STATUS_COLORS[item.status]}>{STATUS_LABELS[item.status]}</Tag>
-              )}
+              <Tag color={STATUS_COLORS[item.status]}>{STATUS_LABELS[item.status]}</Tag>
             </div>
           </Card>
         ))
