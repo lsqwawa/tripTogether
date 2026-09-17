@@ -1,0 +1,152 @@
+html,
+body {
+  margin: 0;
+  background: #f5f7fa;
+}
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  background: #f5f7fa;
+  transition: opacity 0.3s ease;
+  animation: spAutoHide 0.3s ease 5s forwards;
+}
+#splash.splash-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+#splash .splash-mark {
+  display: block;
+  width: 104px;
+  height: 104px;
+}
+#splash .splash-word {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC",
+    sans-serif;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  color: #1f2937;
+  letter-spacing: 6px;
+  padding-left: 6px;
+  animation: spWord 0.28s ease-out 0.3s both;
+}
+#splash .sp-breathe {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spBreathe 2.2s ease-in-out 1.05s infinite;
+}
+#splash .sp-badge {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spBadge 0.2s ease-out both;
+}
+#splash .sp-draw {
+  stroke-dasharray: 1;
+}
+#splash .sp-bar {
+  animation: spDraw 0.18s linear 0.1s both;
+}
+#splash .sp-stem {
+  animation: spDraw 0.18s linear 0.24s both;
+}
+#splash .sp-wave {
+  animation: spDraw 0.18s linear 0.44s both;
+}
+#splash .sp-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spPop 0.14s cubic-bezier(0.34, 1.56, 0.64, 1) 0.36s both;
+}
+#splash .sp-pin {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: spDrop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s both;
+}
+@keyframes spAutoHide {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+@keyframes spBadge {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes spDraw {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+@keyframes spPop {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes spDrop {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.88);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(1.5px) scale(1);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes spWord {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes spBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #splash .splash-word,
+  #splash svg * {
+    animation: none !important;
+  }
+  #splash .sp-draw {
+    stroke-dasharray: none !important;
+  }
+}

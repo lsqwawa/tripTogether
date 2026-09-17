@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Input, Button, message, Typography, Segmented } from "antd";
 import { UserOutlined, LockOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import { useUserStore } from "../stores/userStore";
+import BrandMark, { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../components/BrandMark";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -47,13 +48,12 @@ export default function Login() {
   return (
     <div className="login-container">
       <div className="login-card">
-        <div style={{ textAlign: "center", marginBottom: 16, fontSize: 48 }}>
-          🧭
+        <div className="login-brand">
+          <BrandMark size={52} />
         </div>
-        <div className="login-title">TripTogether</div>
-        <div className="login-subtitle">
-          和旅伴一起规划下一段旅程
-        </div>
+        <div className="login-title">{APP_NAME}</div>
+        <div className="login-en">{APP_NAME_EN}</div>
+        <div className="login-subtitle">{APP_TAGLINE}</div>
 
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <Segmented

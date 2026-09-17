@@ -10,6 +10,7 @@ import {
   ITEM_TYPE_ICONS,
   TRIP_STATUS_LABELS,
 } from "../types";
+import { APP_NAME } from "./BrandMark";
 
 interface Props {
   trip: Trip;
@@ -314,7 +315,7 @@ export default function ExportTripImage({ trip, weather }: Props) {
                 >
                   {trip.inviteCode}
                 </span>{" "}
-                · 来 TripTogether 一起规划吧
+                · 来{APP_NAME}一起规划吧
               </div>
               <div style={{ fontSize: 12, color: "#c0c4cc", marginTop: 6 }}>
                 生成于 {dayjs().format("YYYY-MM-DD")}

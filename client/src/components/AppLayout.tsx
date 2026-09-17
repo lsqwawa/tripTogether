@@ -17,6 +17,7 @@ import {
   CloseOutlined,
 } from "@ant-design/icons";
 import { useUserStore } from "../stores/userStore";
+import BrandMark, { APP_NAME, APP_NAME_EN } from "./BrandMark";
 
 const { Header, Content } = Layout;
 
@@ -80,7 +81,11 @@ export default function AppLayout() {
     <Layout className="app-layout">
       <Header className="app-header">
         <div className="app-logo" onClick={() => navigate("/")}>
-          🧭 TripTogether
+          <BrandMark size={26} />
+          <div className="app-logo-text">
+            <span className="app-logo-name">{APP_NAME}</span>
+            <span className="app-logo-en">{APP_NAME_EN}</span>
+          </div>
         </div>
 
         {/* 桌面端导航 */}

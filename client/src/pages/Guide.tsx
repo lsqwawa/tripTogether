@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Typography, Collapse, Button, Modal, Steps } from "antd";
 import { RocketOutlined, ReadOutlined } from "@ant-design/icons";
 import { buildGuideSections } from "./guideData";
+import { APP_NAME } from "../components/BrandMark";
 
 const { Title, Paragraph } = Typography;
 
@@ -23,7 +24,7 @@ export default function Guide() {
           操作指南手册
         </Title>
         <Paragraph type="secondary" style={{ fontSize: 16 }}>
-          从创建计划到行程总览，这里包含了 TripTogether 每个功能的详细使用说明。
+          从创建计划到行程总览，这里包含了{APP_NAME}每个功能的详细使用说明。
           <br />
           点击各章节下方的「查看详细步骤」按钮，可以逐步查看操作流程。
         </Paragraph>
@@ -37,7 +38,7 @@ export default function Guide() {
 
       <div style={{ textAlign: "center", marginTop: 32, color: "#999" }}>
         <RocketOutlined style={{ marginRight: 8 }} />
-        TripTogether — 让旅行规划更简单
+        {APP_NAME} — 让旅行规划更简单
       </div>
 
       <Modal

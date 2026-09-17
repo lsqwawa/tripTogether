@@ -39,15 +39,33 @@ body {
   overflow: hidden;
 }
 
+/* ---- 顶栏品牌区：徽标 + 「畅行 / TripTogether」双行文案 ---- */
 .app-logo {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1677ff;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.app-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.app-logo-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1677ff;
+}
+
+.app-logo-en {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  letter-spacing: 0.3px;
 }
 
 .app-content {
@@ -652,12 +670,27 @@ body {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
 }
 
+.login-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
 .login-title {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   text-align: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   color: #1f2937;
+}
+
+.login-en {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: #1677ff;
+  text-align: center;
+  margin-bottom: 10px;
 }
 
 .login-subtitle {

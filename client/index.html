@@ -3,11 +3,83 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png" />
+    <meta name="apple-mobile-web-app-title" content="畅行" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>畅行 - 你的旅游搭子</title>
+    <!-- 首屏启动动画：必须内联。外链 CSS/JS 会多一轮请求，就失去了「盖住白屏」的意义。
+         时间轴（秒）：徽标 0~.2 → T 横笔 .1~.28 → 竖笔 .24~.42 → 起点圆环 .36~.5
+         → 波浪路线 .44~.62 → 定位钉 .6~.84 →（1.05 起）整体呼吸循环等待 React 挂载。 -->
+    <link rel="stylesheet" href="./src/styles/index.css" />
   </head>
   <body>
+    <div id="splash" role="status" aria-label="畅行正在加载">
+      <svg
+        class="splash-mark"
+        viewBox="0 0 128 128"
+        width="104"
+        height="104"
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="splashBadge" x1="0" y1="0.18" x2="1" y2="0.82">
+            <stop offset="0" stop-color="#0569FD" />
+            <stop offset="1" stop-color="#09E2C7" />
+          </linearGradient>
+        </defs>
+        <g class="sp-breathe">
+          <rect class="sp-badge" width="128" height="128" rx="34" fill="url(#splashBadge)" />
+          <path
+            class="sp-draw sp-bar"
+            d="M22,40 L84,37"
+            pathLength="1"
+            fill="none"
+            stroke="#FFFFFF"
+            stroke-width="13"
+            stroke-linecap="round"
+          />
+          <path
+            class="sp-draw sp-stem"
+            d="M61,41 L40,76"
+            pathLength="1"
+            fill="none"
+            stroke="#FFFFFF"
+            stroke-width="14"
+            stroke-linecap="round"
+          />
+          <path
+            class="sp-draw sp-wave"
+            d="M46,88 C58,95 60,72 70,76 C78,78.5 82,74 90,74"
+            pathLength="1"
+            fill="none"
+            stroke="#FFFFFF"
+            stroke-width="10"
+            stroke-linecap="round"
+          />
+          <path
+            class="sp-dot"
+            fill="#FFFFFF"
+            fill-rule="evenodd"
+            d="M36,79 a9,9 0 1,0 0,18 a9,9 0 1,0 0,-18 M36,84.4 a3.6,3.6 0 1,1 0,7.2 a3.6,3.6 0 1,1 0,-7.2"
+          />
+          <path
+            class="sp-pin"
+            fill="#FFFFFF"
+            fill-rule="evenodd"
+            d="M90,74 C90,74 102,62 102,55 A12,12 0 1,0 78,55 C78,62 90,74 90,74 Z M94.5,54 a4.5,4.5 0 1,0 -9,0 a4.5,4.5 0 1,0 9,0"
+          />
+        </g>
+      </svg>
+      <div class="splash-word">畅行</div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
